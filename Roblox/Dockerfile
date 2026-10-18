@@ -14,7 +14,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
 COPY --from=build /app/publish .
-COPY api/public /app/public
+COPY --from=build /src/api/public /app/public
 
 RUN if [ -d /app/public/css/Roblox ] && [ ! -d /app/public/css/roblox ]; then \
     ln -s Roblox /app/public/css/roblox; \
