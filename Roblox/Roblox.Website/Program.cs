@@ -59,8 +59,7 @@ Roblox.Configuration.GameServerIp = configuration.GetSection("GameServerIp").Val
 Roblox.Configuration.UserAgentBypassSecret = configuration.GetSection("UserAgentBypassSecret").Value!;
 Roblox.Configuration.VerificationSecret = configuration.GetSection("VerificationSecret").Value!;
 Roblox.Configuration.LuaScriptsDirectory = configuration.GetSection("Directories:RCCLuaScripts").Value!;
-IConfiguration gameServerConfig = new ConfigurationBuilder().AddJsonFile("game-servers.json").Build();
-Roblox.Configuration.GameServerIpAddresses = gameServerConfig.GetSection("GameServers").Get<IEnumerable<GameServerConfigEntry>>()!;
+Roblox.Configuration.GameServerIpAddresses = Array.Empty<Roblox.GameServerConfigEntry>();
 Roblox.Configuration.AssetValidationServiceUrl =
     configuration.GetSection("AssetValidation:BaseUrl").Value!;
 Roblox.Configuration.AssetValidationServiceAuthorization =
