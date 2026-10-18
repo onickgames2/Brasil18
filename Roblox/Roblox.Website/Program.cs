@@ -148,7 +148,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(Roblox.Configuration.PublicDirectory + "js/"),
+    FileProvider = new PhysicalFileProvider(Path.Combine(Roblox.Configuration.PublicDirectory, "js")),
     RequestPath = "/js",
     OnPrepareResponse = prepareResponseForCache,
 });
