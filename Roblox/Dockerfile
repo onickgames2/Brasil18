@@ -15,8 +15,15 @@ WORKDIR /app
 
 COPY --from=build /app/publish .
 
-ENV ASPNETCORE_HTTP_PORTS=10000
+# Copia os arquivos públicos do site
+COPY api/public /app/public
 
+# Corrige o caminho esperado pelo backend
+RUN if [ -d /app/public/css/Roblox ] && [ ! -d /app/public/css/roblox ]; then \
+    ln -s Roblox /app/public/css/roblox; \
+    fi
+
+ENV ASPNETCORE_HTTP_PORTS=10000
 EXPOSE 10000
 
 ENTRYPOINT ["dotnet", "Roblox.Website.dll"]
