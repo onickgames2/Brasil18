@@ -1,7 +1,9 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-COPY . .
+RUN echo "=== PASTAS NA RAIZ ===" && ls -la /src && \
+    echo "=== PROCURANDO api/public ===" && \
+    find /src -type d -path "*/api/public" 2>/dev/null | head -20
 
 RUN dotnet restore Roblox/Roblox.sln
 
