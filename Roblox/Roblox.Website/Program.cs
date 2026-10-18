@@ -67,7 +67,12 @@ Roblox.Configuration.AssetValidationServiceAuthorization =
 GameServerService.Configure(string.Join(Guid.NewGuid().ToString(), new int [16].Select(_ => Guid.NewGuid().ToString()))); // More TODO: If we every load balance, this will break
 Roblox.Configuration.PackageShirtAssetId = long.Parse(configuration.GetSection("PackageShirtAssetId").Value!);
 Roblox.Configuration.PackagePantsAssetId = long.Parse(configuration.GetSection("PackagePantsAssetId").Value!);
-Roblox.Libraries.TwitterApi.TwitterApi.Configure(configuration.GetSection("Twitter:Bearer").Value!);
+var twitterBearer = configuration.GetSection("Twitter:Bearer").Value;
+
+if (!string.IsNullOrWhiteSpace(twitterBearer))
+{
+    Roblox.Libraries.TwitterApi.TwitterApi.Configure(twitterBearer);
+}
 // Sign up asset ids
 var assetIdsStart = configuration.GetSection("SignupAssetIds").GetChildren().Select(assetIdStr => long.Parse(assetIdStr.Value!));
 Roblox.Configuration.SignupAssetIds = assetIdsStart;
