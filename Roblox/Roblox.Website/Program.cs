@@ -79,6 +79,11 @@ Roblox.Configuration.AssetValidationServiceUrl =
 Roblox.Configuration.AssetValidationServiceAuthorization =
     configuration.GetSection("AssetValidation:Authorization").Value!;
 GameServerService.Configure(string.Join(Guid.NewGuid().ToString(), new int [16].Select(_ => Guid.NewGuid().ToString()))); // More TODO: If we every load balance, this will break
+Console.WriteLine($"[CONFIG DEBUG] Shirt ID válido: {long.TryParse(configuration["PackageShirtAssetId"], out _)}");
+Console.WriteLine($"[CONFIG DEBUG] Pants ID válido: {long.TryParse(configuration["PackagePantsAssetId"], out _)}");
+
+Console.WriteLine($"[CONFIG DEBUG] SignupAssetIds válidos: {configuration.GetSection("SignupAssetIds").GetChildren().All(x => long.TryParse(x.Value, out _))}");
+Console.WriteLine($"[CONFIG DEBUG] SignupAvatarAssetIds válidos: {configuration.GetSection("SignupAvatarAssetIds").GetChildren().All(x => long.TryParse(x.Value, out _))}");
 Roblox.Configuration.PackageShirtAssetId = long.Parse(configuration.GetSection("PackageShirtAssetId").Value!);
 Roblox.Configuration.PackagePantsAssetId = long.Parse(configuration.GetSection("PackagePantsAssetId").Value!);
 var twitterBearer = configuration.GetSection("Twitter:Bearer").Value;
