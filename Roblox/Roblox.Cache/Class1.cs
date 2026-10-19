@@ -28,45 +28,73 @@ public class DistributedCache
 {
     Console.WriteLine("[REDIS DEBUG] Iniciando configuração");
 
-    var uri = new Uri(connectUrl);
-        Console.WriteLine(
-    $"[REDIS DEBUG] Porta/configuração recebida: " +
-    $"{connectUrl.Replace(
-        new Uri(connectUrl.Substring(0, connectUrl.IndexOf('@') + 1)).ToString(),
-        "[CREDENCIAIS]@"
-    )}"
-);
+    if (string.IsNullOrWhiteSpace(connectUrl))
+        throw new InvalidOperationException(
+            "A variável Redis não foi configurada."
+        );
 
-var options = new ConfigurationOptions
-{
-    Ssl = uri.Scheme.Equals(
-        "rediss",
-        StringComparison.OrdinalIgnoreCase
-    ),
-    AbortOnConnectFail = false,
-    ConnectTimeout = 15000,
-    SyncTimeout = 15000
-};
+    const string scheme = "rediss://";
 
-options.EndPoints.Add(uri.Host, uri.Port);
+    if (!connectUrl.StartsWith(
+        scheme,
+        StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException(
+            "A URL Redis precisa começar com rediss://"
+        );
+    }
 
-var userInfo = uri.UserInfo.Split(':', 2);
+    var address = connectUrl.Substring(scheme.Length);
+    var atIndex = address.LastIndexOf('@');
 
-if (userInfo.Length > 0)
-{
+    if (atIndex < 0)
+        throw new InvalidOperationException(
+            "A URL Redis não contém o separador de credenciais."
+        );
+
+    var credentials = address.Substring(0, atIndex);
+    var endpoint = address.Substring(atIndex + 1);
+    var colonIndex = endpoint.LastIndexOf(':');
+
+    if (colonIndex <= 0 ||
+        !int.TryParse(endpoint.Substring(colonIndex + 1), out var port) ||
+        port < 1 || port > 65535)
+    {
+        throw new InvalidOperationException(
+            "Host ou porta Redis inválidos."
+        );
+    }
+
+    var userInfo = credentials.Split(':', 2);
+
+    if (userInfo.Length != 2)
+        throw new InvalidOperationException(
+            "Credenciais Redis inválidas."
+        );
+
+    var host = endpoint.Substring(0, colonIndex);
+
+    var options = new ConfigurationOptions
+    {
+        Ssl = true,
+        AbortOnConnectFail = false,
+        ConnectTimeout = 15000,
+        SyncTimeout = 15000
+    };
+
+    options.EndPoints.Add(host, port);
     options.User = Uri.UnescapeDataString(userInfo[0]);
-}
-
-if (userInfo.Length > 1)
-{
     options.Password = Uri.UnescapeDataString(userInfo[1]);
-}
 
-    Console.WriteLine("[REDIS DEBUG] Configuração interpretada");
+    Console.WriteLine(
+        $"[REDIS DEBUG] Host: {host}; porta: {port}; SSL: ativado"
+    );
 
     redis = ConnectionMultiplexer.Connect(options);
 
-    Console.WriteLine($"[REDIS DEBUG] Conectado: {redis.IsConnected}");
+    Console.WriteLine(
+        $"[REDIS DEBUG] Conectado: {redis.IsConnected}"
+    );
 
     redis.ConnectionFailed += (_, e) =>
     {
@@ -92,12 +120,10 @@ if (userInfo.Length > 1)
             {
                 var toRemove = new List<string>();
 
-                foreach (var k in cache)
+                foreach (var item in cache)
                 {
-                    if (IsExpired(k.Value))
-                    {
-                        toRemove.Add(k.Key);
-                    }
+                    if (IsExpired(item.Value))
+                        toRemove.Add(item.Key);
                 }
 
                 Console.WriteLine(
@@ -105,10 +131,8 @@ if (userInfo.Length > 1)
                     toRemove.Count
                 );
 
-                foreach (var old in toRemove)
-                {
-                    cache.Remove(old);
-                }
+                foreach (var key in toRemove)
+                    cache.Remove(key);
             }
             finally
             {
