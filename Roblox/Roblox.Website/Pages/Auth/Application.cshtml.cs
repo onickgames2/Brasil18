@@ -103,75 +103,85 @@ public class Application : RobloxPageModel
     }
 
     public async Task<IActionResult> OnGet()
+{
+    try
     {
-    Console.WriteLine("[APPLICATION DEBUG] Gerando frase de verificação");
-        try
-        {
-            FeatureFlags.FeatureCheck(FeatureFlag.ApplicationsEnabled);
-        }
-        catch (RobloxException)
-        {
-            errorMessage = "Application submission is temporarily disabled at this time. Try again in a few hours.";
-            submitDisabled = true;
-            return new PageResult();
-        }
-
-        if (discordAccessToken == null)
-        {
-            return new RedirectResult($"https://discord.com/oauth2/authorize?client_id={Configuration.DiscordClientId}&response_type=code&redirect_uri={HttpUtility.UrlEncode(Configuration.BaseUrl)}%2Fapi%2Fapplicationcallback&scope=identify+guilds.members.read+guilds.join");
-        }
-
-        Console.WriteLine("[APPLICATION DEBUG] Criando DiscordApi");
-
-        var info = await discordOAuth.GetUserInfo();
-
-if (info == null)
-{
-    Console.Error.WriteLine("[Application] GetUserInfo returned null.");
-    errorMessage = "Please try re-authorizing your Discord account.";
-    return new PageResult();
-}
-
-discordUser = info;
-Console.WriteLine("[Application] Discord user loaded successfully.");
-        }
-
-        var apps = new ApplicationWebsiteService(HttpContext);
-
-try
-{
-    Console.WriteLine("[APPLICATION DEBUG] Gerando frase de verificação");
-    verificationPhrase = await apps.ApplyVerificationPhrase(
-        hashedIp,
-        ApplicationService.GenerationContext.ApplicationCreation
-    );
-}
-catch (TooManyRequestsException)
-{
-    errorMessage = "Too many attempts to generate a verification phrase. Make sure you have cookies enabled, then try again in a few minutes.";
-    return new PageResult();
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine(
-        $"[Application] Verification phrase failed: {ex}"
-    );
-
-    throw;
-}
-        await ApplyBanner();
-        await ApplyApplication();
-
-
-        if (await ShouldDisableSubmissions())
-        {
-            errorMessage = "There are too many applications pending at this time. Try again in a few hours.";
-            submitDisabled = true;
-            return new PageResult();
-        }
-
+        FeatureFlags.FeatureCheck(FeatureFlag.ApplicationsEnabled);
+    }
+    catch (RobloxException)
+    {
+        errorMessage = "Application submission is temporarily disabled at this time. Try again in a few hours.";
+        submitDisabled = true;
         return new PageResult();
     }
+
+    if (discordAccessToken == null)
+    {
+        return new RedirectResult(
+            $"https://discord.com/oauth2/authorize?client_id={Configuration.DiscordClientId}&response_type=code&redirect_uri={HttpUtility.UrlEncode(Configuration.BaseUrl)}%2Fapi%2Fapplicationcallback&scope=identify+guilds.members.read+guilds.join"
+        );
+    }
+
+    Console.WriteLine("[APPLICATION DEBUG] Obtendo informações do Discord");
+
+    DiscordApi discordOAuth = new(
+        discordAccessToken,
+        Configuration.DiscordApplicationCallback
+    );
+
+    var info = await discordOAuth.GetUserInfo();
+
+    if (info == null)
+    {
+        Console.Error.WriteLine(
+            "[Application] GetUserInfo returned null."
+        );
+
+        errorMessage = "Please try re-authorizing your Discord account.";
+        return new PageResult();
+    }
+
+    discordUser = info;
+
+    Console.WriteLine("[Application] Discord user loaded successfully.");
+
+    var apps = new ApplicationWebsiteService(HttpContext);
+
+    try
+    {
+        Console.WriteLine("[APPLICATION DEBUG] Gerando frase de verificação");
+
+        verificationPhrase = await apps.ApplyVerificationPhrase(
+            hashedIp,
+            ApplicationService.GenerationContext.ApplicationCreation
+        );
+    }
+    catch (TooManyRequestsException)
+    {
+        errorMessage = "Too many attempts to generate a verification phrase. Make sure you have cookies enabled, then try again in a few minutes.";
+        return new PageResult();
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine(
+            $"[Application] Verification phrase failed: {ex}"
+        );
+
+        throw;
+    }
+
+    await ApplyBanner();
+    await ApplyApplication();
+
+    if (await ShouldDisableSubmissions())
+    {
+        errorMessage = "There are too many applications pending at this time. Try again in a few hours.";
+        submitDisabled = true;
+        return new PageResult();
+    }
+
+    return new PageResult();
+}
 
     public async Task<IActionResult> OnPost()
     {
