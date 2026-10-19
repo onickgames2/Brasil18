@@ -20,6 +20,14 @@ IConfiguration configuration = new ConfigurationBuilder()
     .AddEnvironmentVariables()
     .Build();
 
+Console.WriteLine(
+    $"[DEBUG] Pants é URL: {configuration["PackagePantsAssetId"]?.StartsWith("rediss://") == true}"
+);
+
+Console.WriteLine(
+    $"[DEBUG] Redis é URL: {configuration["Redis"]?.StartsWith("rediss://") == true}"
+);
+
 var builder = WebApplication.CreateBuilder(args);
 
 // DB
