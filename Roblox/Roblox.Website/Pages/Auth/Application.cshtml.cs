@@ -132,9 +132,8 @@ public class Application : RobloxPageModel
         }
 
         var apps = new ApplicationWebsiteService(HttpContext);
-        try
-        {
-            try
+
+try
 {
     verificationPhrase = await apps.ApplyVerificationPhrase(
         hashedIp,
@@ -150,7 +149,8 @@ catch (Exception ex)
 {
     Console.Error.WriteLine($"[Application] Verification phrase failed: {ex}");
     throw;
-    };
+}
+
         await ApplyBanner();
         await ApplyApplication();
 
