@@ -123,16 +123,6 @@ builder.Services.AddMvc(c =>
     c.Conventions.Add(new ApiExplorerGetsOnlyConvention())
 );
 
-// Ensure static asset directories exist.
-Roblox.Configuration.ThumbnailsDirectory =
-    "/app/public/images/thumbnails";
-
-Roblox.Configuration.GroupIconsDirectory =
-    "/app/public/images/groups";
-
-Directory.CreateDirectory(Roblox.Configuration.ThumbnailsDirectory);
-Directory.CreateDirectory(Roblox.Configuration.GroupIconsDirectory);
-
 var app = builder.Build();
 app.UseRouting();
 app.UseSwaggerUI(c =>
@@ -190,7 +180,9 @@ if (string.IsNullOrWhiteSpace(Roblox.Configuration.CdnBaseUrl))
 
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(Roblox.Configuration.PublicDirectory + "img/"),
+    FileProvider = new PhysicalFileProvider(
+        Path.Combine(Roblox.Configuration.PublicDirectory, "img")
+    ),
     RequestPath = "/img",
     OnPrepareResponse = prepareResponseForCache,
 });
