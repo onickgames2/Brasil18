@@ -4,36 +4,6 @@ namespace Roblox.Cache;
 
 public class DistributedCache
 {
-public static void Configure(string connectUrl)
-{
-    Console.WriteLine("[REDIS DEBUG] Iniciando configuração");
-
-    var options = ConfigurationOptions.Parse(connectUrl);
-
-    options.ConnectTimeout = 10000;
-    options.SyncTimeout = 10000;
-    options.AbortOnConnectFail = false;
-
-    Console.WriteLine("[REDIS DEBUG] Configuração interpretada");
-
-    redis = ConnectionMultiplexer.Connect(options);
-
-    Console.WriteLine(
-        $"[REDIS DEBUG] Conectado: {redis.IsConnected}"
-    );
-
-    redis.ConnectionFailed += (_, e) =>
-    {
-        Console.WriteLine(
-            $"[REDIS DEBUG] Conexão falhou: {e.FailureType}"
-        );
-    };
-
-    redis.ConnectionRestored += (_, e) =>
-    {
-        Console.WriteLine("[REDIS DEBUG] Conexão restaurada");
-    };
-}
     private static ConnectionMultiplexer? _redis;
     public static StackExchange.Redis.ConnectionMultiplexer redis
     {
@@ -55,21 +25,46 @@ public static void Configure(string connectUrl)
     }
 
     public static void Configure(string connectUrl)
+    public static void Configure(string connectUrl)
+{
+    Console.WriteLine("[REDIS DEBUG] Iniciando configuração");
+
+    var options = ConfigurationOptions.Parse(connectUrl);
+
+    options.ConnectTimeout = 10000;
+    options.SyncTimeout = 10000;
+    options.AbortOnConnectFail = false;
+
+    Console.WriteLine("[REDIS DEBUG] Configuração interpretada");
+
+    redis = ConnectionMultiplexer.Connect(options);
+
+    Console.WriteLine($"[REDIS DEBUG] Conectado: {redis.IsConnected}");
+
+    redis.ConnectionFailed += (_, e) =>
     {
-        var options = ConfigurationOptions.Parse(connectUrl);
+        Console.WriteLine(
+            $"[REDIS DEBUG] Conexão falhou: {e.FailureType} - {e.Exception.Message}"
+        );
+    };
 
-        options.ConnectTimeout = 10000;
-        options.SyncTimeout = 10000;
-        options.AbortOnConnectFail = false;
+    redis.ConnectionRestored += (_, e) =>
+    {
+        Console.WriteLine("[REDIS DEBUG] Conexão restaurada");
+    };
 
-        redis = ConnectionMultiplexer.Connect(options);
-        Task.Run(async () =>
+    Task.Run(async () =>
+    {
+        while (true)
         {
-            while (true)
+            await Task.Delay(TimeSpan.FromMinutes(1));
+
+            mutex.WaitOne();
+
+            try
             {
-                await Task.Delay(TimeSpan.FromMinutes(1));
-                mutex.WaitOne();
                 var toRemove = new List<string>();
+
                 foreach (var k in cache)
                 {
                     if (IsExpired(k.Value))
@@ -77,15 +72,23 @@ public static void Configure(string connectUrl)
                         toRemove.Add(k.Key);
                     }
                 }
-                Console.WriteLine("[info] Roblox.Cache.DistributedCache: Removing {0} expired items", toRemove.Count);
+
+                Console.WriteLine(
+                    "[info] Roblox.Cache.DistributedCache: Removing {0} expired items",
+                    toRemove.Count
+                );
+
                 foreach (var old in toRemove)
                 {
                     cache.Remove(old);
                 }
+            }
+            finally
+            {
                 mutex.ReleaseMutex();
             }
-        });
-    }
+        }
+    });
 
     private static void AddToCache(string key, string value, DateTime lifetime)
     {
