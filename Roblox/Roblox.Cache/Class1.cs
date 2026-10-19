@@ -29,6 +29,13 @@ public class DistributedCache
     Console.WriteLine("[REDIS DEBUG] Iniciando configuração");
 
     var uri = new Uri(connectUrl);
+        Console.WriteLine(
+    $"[REDIS DEBUG] Porta/configuração recebida: " +
+    $"{connectUrl.Replace(
+        new Uri(connectUrl.Substring(0, connectUrl.IndexOf('@') + 1)).ToString(),
+        "[CREDENCIAIS]@"
+    )}"
+);
 
 var options = new ConfigurationOptions
 {
