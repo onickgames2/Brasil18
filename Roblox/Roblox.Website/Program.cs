@@ -24,7 +24,21 @@ var builder = WebApplication.CreateBuilder(args);
 
 // DB
 Roblox.Services.Database.Configure(configuration.GetSection("Postgres").Value!);
-Roblox.Services.Cache.Configure(configuration.GetSection("Redis").Value!);
+var redisConfig = configuration.GetSection("Redis").Value;
+
+Console.WriteLine(
+    $"[REDIS DEBUG] Configuração encontrada: {!string.IsNullOrWhiteSpace(redisConfig)}"
+);
+
+Console.WriteLine(
+    $"[REDIS DEBUG] Começa com rediss://: {redisConfig?.StartsWith("rediss://", StringComparison.OrdinalIgnoreCase)}"
+);
+
+Roblox.Services.Cache.Configure(
+    redisConfig ?? throw new InvalidOperationException(
+        "A configuração Redis não foi encontrada."
+    )
+);
 
 // Config
 Roblox.Configuration.CdnBaseUrl = configuration.GetSection("CdnBaseUrl").Value!;
