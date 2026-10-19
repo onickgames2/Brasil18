@@ -155,7 +155,7 @@ app.UseStaticFiles(new StaticFileOptions
 // Should be public
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(Roblox.Configuration.PublicDirectory + "UnsecuredContent/"),
+    FileProvider = new PhysicalFileProvider(Path.Combine(Roblox.Configuration.PublicDirectory, "UnsecuredContent")"),
     RequestPath = "/UnsecuredContent",
     OnPrepareResponse = prepareResponseForCache,
 });
