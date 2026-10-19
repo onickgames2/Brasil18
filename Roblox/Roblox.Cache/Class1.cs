@@ -28,11 +28,32 @@ public class DistributedCache
 {
     Console.WriteLine("[REDIS DEBUG] Iniciando configuração");
 
-    var options = ConfigurationOptions.Parse(connectUrl);
+    var uri = new Uri(connectUrl);
 
-    options.ConnectTimeout = 10000;
-    options.SyncTimeout = 10000;
-    options.AbortOnConnectFail = false;
+var options = new ConfigurationOptions
+{
+    Ssl = uri.Scheme.Equals(
+        "rediss",
+        StringComparison.OrdinalIgnoreCase
+    ),
+    AbortOnConnectFail = false,
+    ConnectTimeout = 15000,
+    SyncTimeout = 15000
+};
+
+options.EndPoints.Add(uri.Host, uri.Port);
+
+var userInfo = uri.UserInfo.Split(':', 2);
+
+if (userInfo.Length > 0)
+{
+    options.User = Uri.UnescapeDataString(userInfo[0]);
+}
+
+if (userInfo.Length > 1)
+{
+    options.Password = Uri.UnescapeDataString(userInfo[1]);
+}
 
     Console.WriteLine("[REDIS DEBUG] Configuração interpretada");
 
