@@ -134,13 +134,23 @@ public class Application : RobloxPageModel
         var apps = new ApplicationWebsiteService(HttpContext);
         try
         {
-            verificationPhrase = await apps.ApplyVerificationPhrase(hashedIp, ApplicationService.GenerationContext.ApplicationCreation);
-        }
-        catch (TooManyRequestsException)
-        {
-            errorMessage = "Too many attempts to generate a verification phrase. Make sure you have cookies enabled, then try again in a few minutes.";
-            return new PageResult();
-        }
+            try
+{
+    verificationPhrase = await apps.ApplyVerificationPhrase(
+        hashedIp,
+        ApplicationService.GenerationContext.ApplicationCreation
+    );
+}
+catch (TooManyRequestsException)
+{
+    errorMessage = "Too many attempts to generate a verification phrase. Make sure you have cookies enabled, then try again in a few minutes.";
+    return new PageResult();
+}
+catch (Exception ex)
+{
+    Console.Error.WriteLine($"[Application] Verification phrase failed: {ex}");
+    throw;
+}
         await ApplyBanner();
         await ApplyApplication();
 
