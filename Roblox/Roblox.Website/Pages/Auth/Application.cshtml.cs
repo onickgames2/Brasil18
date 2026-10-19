@@ -150,7 +150,7 @@ catch (Exception ex)
 {
     Console.Error.WriteLine($"[Application] Verification phrase failed: {ex}");
     throw;
-}
+    };
         await ApplyBanner();
         await ApplyApplication();
 
