@@ -4,6 +4,36 @@ namespace Roblox.Cache;
 
 public class DistributedCache
 {
+public static void Configure(string connectUrl)
+{
+    Console.WriteLine("[REDIS DEBUG] Iniciando configuração");
+
+    var options = ConfigurationOptions.Parse(connectUrl);
+
+    options.ConnectTimeout = 10000;
+    options.SyncTimeout = 10000;
+    options.AbortOnConnectFail = false;
+
+    Console.WriteLine("[REDIS DEBUG] Configuração interpretada");
+
+    redis = ConnectionMultiplexer.Connect(options);
+
+    Console.WriteLine(
+        $"[REDIS DEBUG] Conectado: {redis.IsConnected}"
+    );
+
+    redis.ConnectionFailed += (_, e) =>
+    {
+        Console.WriteLine(
+            $"[REDIS DEBUG] Conexão falhou: {e.FailureType}"
+        );
+    };
+
+    redis.ConnectionRestored += (_, e) =>
+    {
+        Console.WriteLine("[REDIS DEBUG] Conexão restaurada");
+    };
+}
     private static ConnectionMultiplexer? _redis;
     public static StackExchange.Redis.ConnectionMultiplexer redis
     {
