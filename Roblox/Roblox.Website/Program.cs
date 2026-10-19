@@ -160,32 +160,33 @@ app.UseStaticFiles(new StaticFileOptions
     OnPrepareResponse = prepareResponseForCache,
 });
 
-// CdnBaseUrl is empty on dev servers
+// Ensure thumbnail directories exist and use absolute paths.
+Roblox.Configuration.ThumbnailsDirectory = "/app/public/images/thumbnails";
+Roblox.Configuration.GroupIconsDirectory = "/app/public/images/groups";
+
+Directory.CreateDirectory(Roblox.Configuration.ThumbnailsDirectory);
+Directory.CreateDirectory(Roblox.Configuration.GroupIconsDirectory);
+
 if (string.IsNullOrWhiteSpace(Roblox.Configuration.CdnBaseUrl))
 {
     app.UseStaticFiles(new StaticFileOptions
     {
-        FileProvider = new PhysicalFileProvider(Roblox.Configuration.ThumbnailsDirectory),
+        FileProvider = new PhysicalFileProvider(
+            Roblox.Configuration.ThumbnailsDirectory
+        ),
         RequestPath = "/images/thumbnails",
         OnPrepareResponse = prepareResponseForCache,
     });
 
     app.UseStaticFiles(new StaticFileOptions
     {
-        FileProvider = new PhysicalFileProvider(Roblox.Configuration.GroupIconsDirectory),
+        FileProvider = new PhysicalFileProvider(
+            Roblox.Configuration.GroupIconsDirectory
+        ),
         RequestPath = "/images/groups",
         OnPrepareResponse = prepareResponseForCache,
     });
 }
-
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(
-        Path.Combine(Roblox.Configuration.PublicDirectory, "img")
-    ),
-    RequestPath = "/img",
-    OnPrepareResponse = prepareResponseForCache,
-});
 
 #if FALSE
 app.UseStaticFiles(new StaticFileOptions
