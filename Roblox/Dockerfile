@@ -20,6 +20,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
 COPY --from=build /app/publish .
+COPY --from=build /src/Roblox/Roblox.Website/Keys /app/Keys
 COPY --from=build /src/api/public /app/public
 
 RUN if [ -d /app/public/css/Roblox ] && [ ! -d /app/public/css/roblox ]; then \
