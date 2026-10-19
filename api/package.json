@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "description": "",
     "main": "index.js",
-    "private": true,
+    "private": false,
     "scripts": {
         "build": "tsc",
         "publish": "npm i && npm run build && npm run test && node utils/publish.js",
