@@ -17,22 +17,56 @@ public class SignService : ServiceBase
     private static readonly string format2048 = "--rbxsig2%{0}%{1}";
 
     public static void Setup()
+{
+    try
     {
-        try
-        {
-            byte[] privateKeyBlob = Convert.FromBase64String(System.IO.File.ReadAllText(@"Keys\PrivateKeyBlob.txt"));
+        string keysDirectory = Path.Combine(
+            AppContext.BaseDirectory,
+            "Keys"
+        );
 
-            _shaCsp = SHA1.Create();
-            _rsaCsp = new RSACryptoServiceProvider();
+        string blobPath = Path.Combine(
+            keysDirectory,
+            "PrivateKeyBlob.txt"
+        );
 
-            _rsaCsp.ImportCspBlob(privateKeyBlob);
-            rsa2048.ImportFromPem(System.IO.File.ReadAllText(@"Keys\PrivateKey2048.pem"));
-        }
-        catch (Exception ex)
-        {
-            throw new Exception("Error setting up SignatureController: " + ex.Message);
-        }
+        string pemPath = Path.Combine(
+            keysDirectory,
+            "PrivateKey2048.pem"
+        );
+
+        if (!File.Exists(blobPath))
+            throw new FileNotFoundException(
+                "PrivateKeyBlob.txt não encontrado",
+                blobPath
+            );
+
+        if (!File.Exists(pemPath))
+            throw new FileNotFoundException(
+                "PrivateKey2048.pem não encontrado",
+                pemPath
+            );
+
+        byte[] privateKeyBlob = Convert.FromBase64String(
+            File.ReadAllText(blobPath)
+        );
+
+        _shaCsp = SHA1.Create();
+        _rsaCsp = new RSACryptoServiceProvider();
+
+        _rsaCsp.ImportCspBlob(privateKeyBlob);
+
+        rsa2048.ImportFromPem(
+            File.ReadAllText(pemPath)
+        );
     }
+    catch (Exception ex)
+    {
+        throw new Exception(
+            "Error setting up SignatureController: " + ex.Message
+        );
+    }
+}
 
     public string SignJsonResponseForClientFromPrivateKey(dynamic JSONToSign)
     {
