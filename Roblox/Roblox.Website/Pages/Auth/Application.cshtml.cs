@@ -123,16 +123,17 @@ public class Application : RobloxPageModel
 
         Console.WriteLine("[APPLICATION DEBUG] Criando DiscordApi");
 
-        DiscordApi discordOAuth = new(discordAccessToken, Configuration.DiscordApplicationCallback);
-        Console.WriteLine("[APPLICATION DEBUG] Consultando usuário Discord");
         var info = await discordOAuth.GetUserInfo();
-        if (info == null)
-        {
-            errorMessage = "Please try re-authorizing ur account";
-        }
-        else
-        {
-            discordUser = info;
+
+if (info == null)
+{
+    Console.Error.WriteLine("[Application] GetUserInfo returned null.");
+    errorMessage = "Please try re-authorizing your Discord account.";
+    return new PageResult();
+}
+
+discordUser = info;
+Console.WriteLine("[Application] Discord user loaded successfully.");
         }
 
         var apps = new ApplicationWebsiteService(HttpContext);
