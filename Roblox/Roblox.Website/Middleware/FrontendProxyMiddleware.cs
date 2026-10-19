@@ -126,11 +126,11 @@ public class FrontendProxyMiddleware
         */
 
         var safeUrl = new Uri(fullUrl);
-        if (safeUrl.Port != 3000)
-            throw new ArgumentException("Unsafe Url: " + fullUrl);
-        if (safeUrl.Host != "localhost")
-            throw new ArgumentException("Unsafe Url: " + fullUrl);
-
+if (safeUrl.Port != 3000)
+    throw new ArgumentException("Unsafe Url: " + fullUrl);
+if (safeUrl.Host != "localhost")
+    throw new ArgumentException("Unsafe Url: " + fullUrl);
+        
         var result = await _httpClient.GetAsync(safeUrl);
         return result;
     }
