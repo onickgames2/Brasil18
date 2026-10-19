@@ -25,7 +25,6 @@ public class DistributedCache
     }
 
     public static void Configure(string connectUrl)
-    public static void Configure(string connectUrl)
 {
     Console.WriteLine("[REDIS DEBUG] Iniciando configuração");
 
@@ -89,7 +88,7 @@ public class DistributedCache
             }
         }
     });
-
+ }
     private static void AddToCache(string key, string value, DateTime lifetime)
     {
         if (cache.Count > 1000)
