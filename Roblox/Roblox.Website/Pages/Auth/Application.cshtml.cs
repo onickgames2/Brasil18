@@ -104,6 +104,7 @@ public class Application : RobloxPageModel
 
     public async Task<IActionResult> OnGet()
     {
+    Console.WriteLine("[APPLICATION DEBUG] Gerando frase de verificação");
         try
         {
             FeatureFlags.FeatureCheck(FeatureFlag.ApplicationsEnabled);
@@ -120,7 +121,10 @@ public class Application : RobloxPageModel
             return new RedirectResult($"https://discord.com/oauth2/authorize?client_id={Configuration.DiscordClientId}&response_type=code&redirect_uri={HttpUtility.UrlEncode(Configuration.BaseUrl)}%2Fapi%2Fapplicationcallback&scope=identify+guilds.members.read+guilds.join");
         }
 
+        Console.WriteLine("[APPLICATION DEBUG] Criando DiscordApi");
+
         DiscordApi discordOAuth = new(discordAccessToken, Configuration.DiscordApplicationCallback);
+        Console.WriteLine("[APPLICATION DEBUG] Consultando usuário Discord");
         var info = await discordOAuth.GetUserInfo();
         if (info == null)
         {
@@ -135,6 +139,7 @@ public class Application : RobloxPageModel
 
 try
 {
+    Console.WriteLine("[APPLICATION DEBUG] Gerando frase de verificação");
     verificationPhrase = await apps.ApplyVerificationPhrase(
         hashedIp,
         ApplicationService.GenerationContext.ApplicationCreation
