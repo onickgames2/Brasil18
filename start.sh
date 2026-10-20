@@ -2,21 +2,20 @@
 
 echo "🇧🇷 Iniciando BRASIL17..."
 
-# Porta pública do Render (o Next.js usa esta)
+# Porta pública do Render: quem usa é o BACKEND (ele faz proxy pro Next)
 PUBLIC_PORT="${PORT:-10000}"
-# Porta interna do backend ASP.NET
-BACKEND_PORT=5000
+# Porta interna do Next.js (precisa ser a mesma do FrontendProxyMiddleware)
+FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 
-# Frontend (Next.js) na porta pública
+# Frontend (Next.js) na porta interna
 cd /app/Frontend || exit 1
-PORT="$PUBLIC_PORT" npm run start -- --hostname 0.0.0.0 --port "$PUBLIC_PORT" &
+PORT="$FRONTEND_PORT" npm run start -- --hostname 0.0.0.0 --port "$FRONTEND_PORT" &
 FRONTEND_PID=$!
 
-# Backend (ASP.NET) na porta interna
+# Backend (ASP.NET) na porta pública
 cd /app || exit 1
-PORT="$BACKEND_PORT" \
-ASPNETCORE_URLS="http://0.0.0.0:$BACKEND_PORT" \
-dotnet Roblox.Website.dll &
+unset ASPNETCORE_HTTP_PORTS
+ASPNETCORE_URLS="http://0.0.0.0:$PUBLIC_PORT" dotnet Roblox.Website.dll &
 BACKEND_PID=$!
 
 terminate() {
