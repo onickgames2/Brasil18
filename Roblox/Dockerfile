@@ -55,9 +55,10 @@ WORKDIR /app
 COPY --from=backend-build /app/publish .
 COPY --from=backend-build /src/Roblox/Roblox.Website/Keys /app/Keys
 
-# Arquivos estáticos necessários ao backend
-RUN mkdir -p /app/public
-COPY api/public/ /app/public/
+# Arquivos públicos
+COPY --from=backend-build /src/api/public/ /app/public/
+
+RUN ls -la /app/public/css/roblox/ || true
 
 # Frontend compilado
 
