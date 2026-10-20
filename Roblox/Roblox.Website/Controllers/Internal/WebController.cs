@@ -64,8 +64,6 @@ public class WebController : ControllerBase
     if (!string.IsNullOrWhiteSpace(error) || string.IsNullOrWhiteSpace(code))
         return Content("Login via discord has failed or was cancelled, please try logging in normally");
 
-    var discordApi = await DiscordApi.CreateFromOAuthCode(code, Configuration.DiscordLoginCallback);
-
         var discordApi = await DiscordApi.CreateFromOAuthCode(code, Configuration.DiscordLoginCallback);
         if (discordApi == null)
         {
