@@ -1,9 +1,6 @@
-==========================================
-
-1. Compilar o frontend
-
-==========================================
-
+# ==========================================
+# 1. Compilar o frontend
+# ==========================================
 FROM node:20-bookworm-slim AS frontend-build
 
 WORKDIR /src/frontend
@@ -14,11 +11,9 @@ RUN npm install
 COPY frontend/ ./
 RUN npm run build
 
-==========================================
-
-2. Compilar o backend
-
-==========================================
+# ==========================================
+# 2. Compilar o backend
+# ==========================================
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS backend-build
 
@@ -33,15 +28,15 @@ RUN dotnet publish Roblox/Roblox.Website/Roblox.Website.csproj \
 -o /app/publish \
 --no-restore
 
-==========================================
+# ==========================================
 
-3. Container final: frontend + backend
+# 3. Container final: frontend + backend
 
-==========================================
+# ==========================================
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 
-Instalar Node.js e npm
+# Instalar Node.js e npm
 
 RUN apt-get update \
 && apt-get install -y curl ca-certificates gnupg \
@@ -64,7 +59,7 @@ COPY --from=backend-build /src/Roblox/Roblox.Website/Keys /app/Keys
 RUN mkdir -p /app/public
 COPY api/public/ /app/public/
 
-Frontend compilado
+# Frontend compilado
 
 WORKDIR /app/Frontend
 
@@ -73,7 +68,7 @@ COPY --from=frontend-build /src/frontend/ ./
 
 RUN npm install --omit=dev
 
-Inicializador
+# Inicializador
 
 WORKDIR /app
 
