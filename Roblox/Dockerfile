@@ -62,7 +62,7 @@ RUN echo "=== VERIFICANDO CSS ROBLOX ===" && \
     ls -la /app/public/css/ && \
     ls -la /app/public/css/roblox/
 
-RUN ls -la /app/public/css/roblox/ || true
+RUN ls -la /app/public/css/roblox/
 
 # Frontend compilado
 
