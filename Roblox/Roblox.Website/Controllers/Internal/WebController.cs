@@ -55,11 +55,16 @@ public class WebController : ControllerBase
     }
 
     [HttpGetBypass("api/logincallback")]
-    public async Task<IActionResult> DiscordLoginCallBack(string code)
-    {
-        // If we already have a session lets redirect
-        if (userSession != null)
-            return Redirect("/home");
+    public async Task<IActionResult> DiscordLoginCallBack(string? code = null, string? error = null)
+{
+    // If we already have a session lets redirect
+    if (userSession != null)
+        return Redirect("/home");
+
+    if (!string.IsNullOrWhiteSpace(error) || string.IsNullOrWhiteSpace(code))
+        return Content("Login via discord has failed or was cancelled, please try logging in normally");
+
+    var discordApi = await DiscordApi.CreateFromOAuthCode(code, Configuration.DiscordLoginCallback);
 
         var discordApi = await DiscordApi.CreateFromOAuthCode(code, Configuration.DiscordLoginCallback);
         if (discordApi == null)
