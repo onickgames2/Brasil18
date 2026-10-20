@@ -84,8 +84,6 @@ Console.WriteLine($"[DISCORD DEBUG] LoginCallback: {Roblox.Configuration.Discord
 Console.WriteLine($"[DISCORD DEBUG] LinkCallback: {Roblox.Configuration.DiscordLinkCallback}");
 Console.WriteLine($"[DISCORD DEBUG] ClientId definido: {!string.IsNullOrWhiteSpace(Roblox.Configuration.DiscordClientId)}");
 Console.WriteLine($"[DISCORD DEBUG] ClientSecret definido: {!string.IsNullOrWhiteSpace(Roblox.Configuration.DiscordClientSecret)}");
-Roblox.Configuration.DiscordLoginCallback = Roblox.Configuration.BaseUrl + configuration.GetSection("Discord:LoginCallback").Value;
-Roblox.Configuration.DiscordLinkCallback = Roblox.Configuration.BaseUrl + configuration.GetSection("Discord:LinkCallback").Value;
 Roblox.Configuration.GameServerAuthorization = configuration.GetSection("GameServerAuthorization").Value!;
 Roblox.Configuration.BotAuthorization = configuration.GetSection("BotAuthorization").Value!;
 Roblox.Configuration.RccAuthorization = configuration.GetSection("RccAuthorization").Value!;
