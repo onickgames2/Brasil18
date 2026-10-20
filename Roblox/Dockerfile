@@ -58,6 +58,10 @@ COPY --from=backend-build /src/Roblox/Roblox.Website/Keys /app/Keys
 # Arquivos públicos
 COPY --from=backend-build /src/api/public/ /app/public/
 
+RUN echo "=== VERIFICANDO CSS ROBLOX ===" && \
+    ls -la /app/public/css/ && \
+    ls -la /app/public/css/roblox/
+
 RUN ls -la /app/public/css/roblox/ || true
 
 # Frontend compilado
