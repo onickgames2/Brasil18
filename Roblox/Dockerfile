@@ -14,7 +14,6 @@ RUN npm run build
 # ==========================================
 # 2. Compilar o backend
 # ==========================================
-
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS backend-build
 
 WORKDIR /src
@@ -24,30 +23,26 @@ COPY . .
 RUN dotnet restore Roblox/Roblox.sln
 
 RUN dotnet publish Roblox/Roblox.Website/Roblox.Website.csproj \
--c Release \
--o /app/publish \
---no-restore
+    -c Release \
+    -o /app/publish \
+    --no-restore
 
 # ==========================================
-
 # 3. Container final: frontend + backend
-
 # ==========================================
-
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 
-# Instalar Node.js e npm
-
+# Node.js + libsodium (o .dll do repo só serve no Windows)
 RUN apt-get update \
-&& apt-get install -y curl ca-certificates gnupg \
-&& install -d /etc/apt/keyrings \
-&& curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-| gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
-&& echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
-> /etc/apt/sources.list.d/nodesource.list \
-&& apt-get update \
-&& apt-get install -y nodejs \
-&& rm -rf /var/lib/apt/lists/*
+ && apt-get install -y curl ca-certificates gnupg libsodium23 \
+ && install -d /etc/apt/keyrings \
+ && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+    | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+ && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+    > /etc/apt/sources.list.d/nodesource.list \
+ && apt-get update \
+ && apt-get install -y nodejs \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -63,11 +58,9 @@ RUN if [ -d /app/public/css/Roblox ]; then \
     fi
 
 RUN test -d /app/public/css/roblox
-
 RUN ls -la /app/public/css/roblox/
 
 # Frontend compilado
-
 WORKDIR /app/Frontend
 
 COPY --from=frontend-build /src/frontend/package*.json ./
@@ -76,15 +69,14 @@ COPY --from=frontend-build /src/frontend/ ./
 RUN npm install --omit=dev
 
 # Inicializador
-
 WORKDIR /app
 
 COPY start.sh /app/start.sh
-
 RUN chmod +x /app/start.sh
 
-ENV ASPNETCORE_HTTP_PORTS=10000
-
+# O Render define PORT (10000): quem usa é o Next.js.
+# O backend usa uma porta interna (BACKEND_PORT), definida no start.sh.
+ENV BACKEND_PORT=5000
 EXPOSE 10000
 
 ENTRYPOINT ["/app/start.sh"]
