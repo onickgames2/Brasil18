@@ -105,16 +105,19 @@ public class WebController : ControllerBase
     }
 
     [HttpGetBypass("api/applicationcallback")]
-    public async Task<IActionResult> DiscordOAuthCallback(string code)
+    public async Task<IActionResult> DiscordOAuthCallback(string? code = null, string? error = null)
+   {
+    const string key = "MARINE-DISCORD";
+    // Delete any old sessions
+    if (discordAccessToken != null)
     {
-        const string key = "MARINE-DISCORD";
-        // Delete any old sessions
-        if (discordAccessToken != null)
-        {
-            HttpContext.Response.Cookies.Delete(key);
-        }
+        HttpContext.Response.Cookies.Delete(key);
+    }
 
-        var discordApi = await DiscordApi.CreateFromOAuthCode(code, Configuration.DiscordApplicationCallback);
+    if (!string.IsNullOrWhiteSpace(error) || string.IsNullOrWhiteSpace(code))
+        return Content("Discord verification failed or was cancelled, please try again");
+
+    var discordApi = await DiscordApi.CreateFromOAuthCode(code, Configuration.DiscordApplicationCallback);
         if (discordApi == null)
         {
             return Content("Login via discord has failed, please try logging in normally");
