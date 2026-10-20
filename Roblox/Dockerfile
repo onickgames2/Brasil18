@@ -1,13 +1,25 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+# ==========================================
+# 1. Compilar o frontend
+# ==========================================
+FROM node:20-bookworm-slim AS frontend-build
+
+WORKDIR /src/frontend
+
+COPY frontend/package*.json ./
+RUN npm install
+
+COPY frontend/ ./
+RUN npm run build
+
+
+# ==========================================
+# 2. Compilar o backend
+# ==========================================
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS backend-build
+
 WORKDIR /src
 
 COPY . .
-
-RUN echo "=== TESTE DO CONTEXTO ===" && pwd && ls -la && find . -maxdepth 4 -type d -name public
-
-RUN echo "=== PASTAS NA RAIZ ===" && ls -la /src && \
-    echo "=== PROCURANDO api/public ===" && \
-    find /src -type d -path "*/api/public" 2>/dev/null | head -20
 
 RUN dotnet restore Roblox/Roblox.sln
 
@@ -16,19 +28,48 @@ RUN dotnet publish Roblox/Roblox.Website/Roblox.Website.csproj \
     -o /app/publish \
     --no-restore
 
+
+# ==========================================
+# 3. Container final: frontend + backend
+# ==========================================
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+
+# Instalar Node.js e npm
+RUN apt-get update \
+    && apt-get install -y curl ca-certificates gnupg \
+    && install -d /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+       | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+       > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-COPY --from=build /app/publish .
-COPY --from=build /src/Roblox/Roblox.Website/Keys /app/Keys
-COPY --from=build /src/api/public /app/public
+# Backend
+COPY --from=backend-build /app/publish .
+COPY --from=backend-build /src/Roblox/Roblox.Website/Keys /app/Keys
+COPY --from=backend-build /src/api/public /app/public
 
-RUN if [ -d /app/public/css/Roblox ] && [ ! -d /app/public/css/roblox ]; then \
-    ln -s Roblox /app/public/css/roblox; \
-    fi
+# Frontend compilado
+WORKDIR /app/Frontend
+
+COPY --from=frontend-build /src/frontend/package*.json ./
+COPY --from=frontend-build /src/frontend/ ./
+
+RUN npm install --omit=dev
+
+# Inicializador
+WORKDIR /app
+
+COPY start.sh /app/start.sh
+
+RUN chmod +x /app/start.sh
 
 ENV ASPNETCORE_HTTP_PORTS=10000
 
 EXPOSE 10000
 
-ENTRYPOINT ["dotnet", "Roblox.Website.dll"]
+ENTRYPOINT ["/app/start.sh"]
