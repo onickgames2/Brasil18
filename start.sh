@@ -4,7 +4,7 @@ set -m
 
 echo "🇧🇷 Iniciando BRASIL17..."
 
-cd /app/frontend
+cd /app/Frontend
 npm run start -- --hostname 0.0.0.0 &
 FRONTEND_PID=$!
 
