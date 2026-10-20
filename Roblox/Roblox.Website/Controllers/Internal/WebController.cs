@@ -48,23 +48,29 @@ public class WebController : ControllerBase
         });
     }
 
+    private const string LoginCallbackPath = "/api/logincallback";
+    private const string ApplicationCallbackPath = "/api/applicationcallback";
+
     [HttpGetBypass("auth/discord-login")]
     public IActionResult DiscordLogin()
     {
-        return Redirect($"https://discord.com/oauth2/authorize?client_id={Configuration.DiscordClientId}&response_type=code&redirect_uri={HttpUtility.UrlEncode(Configuration.BaseUrl)}%2Fapi%2Flogincallback&scope=identify+guilds.members.read+guilds.join");
+        var redirectUri = HttpUtility.UrlEncode(Configuration.BaseUrl + LoginCallbackPath);
+        return Redirect($"https://discord.com/oauth2/authorize?client_id={Configuration.DiscordClientId}&response_type=code&redirect_uri={redirectUri}&scope=identify+guilds.members.read+guilds.join");
     }
 
     [HttpGetBypass("api/logincallback")]
-    public async Task<IActionResult> DiscordLoginCallBack(string? code = null, string? error = null)
+    public async Task<IActionResult> DiscordLoginCallBack(string? code = null)
     {
-    // If we already have a session lets redirect
-    if (userSession != null)
-        return Redirect("/home");
+        Console.WriteLine($"[DISCORD DEBUG] logincallback query: {HttpContext.Request.QueryString}");
 
-    if (!string.IsNullOrWhiteSpace(error) || string.IsNullOrWhiteSpace(code))
-        return Content("Login via discord has failed or was cancelled, please try logging in normally");
+        if (string.IsNullOrWhiteSpace(code))
+            return Content("Discord did not send an authorization code. Please go back and try again.");
 
-        var discordApi = await DiscordApi.CreateFromOAuthCode(code, Configuration.DiscordLoginCallback);
+        // If we already have a session lets redirect
+        if (userSession != null)
+            return Redirect("/home");
+
+        var discordApi = await DiscordApi.CreateFromOAuthCode(code, Configuration.BaseUrl + LoginCallbackPath);
         if (discordApi == null)
         {
             return Content("Login via discord has failed, please try logging in normally");
@@ -108,48 +114,48 @@ public class WebController : ControllerBase
     }
 
     [HttpGetBypass("api/applicationcallback")]
-    public async Task<IActionResult> DiscordOAuthCallback(string? code = null, string? error = null)
+    public async Task<IActionResult> DiscordOAuthCallback(string? code = null)
     {
-    Console.WriteLine($"[discord-debug] url={Request.Scheme}://{Request.Host}{Request.Path}{Request.QueryString} referer={Request.Headers.Referer} error={error} error_desc={Request.Query["error_description"]} hasCode={!string.IsNullOrWhiteSpace(code)}");
+        Console.WriteLine($"[DISCORD DEBUG] applicationcallback query: {HttpContext.Request.QueryString}");
 
-    const string key = "MARINE-DISCORD";
-    // Delete any old sessions
-    if (discordAccessToken != null)
-    {
-        HttpContext.Response.Cookies.Delete(key);
+        if (string.IsNullOrWhiteSpace(code))
+            return Content("Discord did not send an authorization code. Please go back and try again.");
+
+        const string key = "MARINE-DISCORD";
+        // Delete any old sessions
+        if (discordAccessToken != null)
+        {
+            HttpContext.Response.Cookies.Delete(key);
+        }
+
+        var discordApi = await DiscordApi.CreateFromOAuthCode(code, Configuration.BaseUrl + ApplicationCallbackPath);
+        if (discordApi == null)
+        {
+            return Content("Login via discord has failed, please try logging in normally");
+        }
+
+        var userInfo = await discordApi.GetUserInfo();
+        if (userInfo == null)
+        {
+            return Content("Please try again later");
+        }
+
+        // We store the access token as base64 in a cookie so we can use it later to get the user info
+        string base64AccessToken = Convert.ToBase64String(Encoding.UTF8.GetBytes(discordApi.AccessToken));
+
+        HttpContext.Response.Cookies.Append(key, base64AccessToken, new CookieOptions
+        {
+            IsEssential = true,
+            Path = "/",
+            HttpOnly = true,
+            Secure = true,
+            Expires = DateTimeOffset.Now.Add(TimeSpan.FromSeconds(604800)),
+            SameSite = SameSiteMode.Lax,
+        });
+
+        Console.WriteLine("[DISCORD DEBUG] applicationcallback OK, redirecting to /auth/application");
+        return Redirect("/auth/application");
     }
-
-    if (!string.IsNullOrWhiteSpace(error) || string.IsNullOrWhiteSpace(code))
-        return Content($"Discord verification failed or was cancelled, please try again (error={error}, hasCode={!string.IsNullOrWhiteSpace(code)})");
-
-    var discordApi = await DiscordApi.CreateFromOAuthCode(code, Configuration.DiscordApplicationCallback);
-    if (discordApi == null)
-    {
-        return Content("Login via discord has failed, please try logging in normally");
-    }
-
-    var userInfo = await discordApi.GetUserInfo();
-    if (userInfo == null)
-    {
-        return Content("Please try again later");
-    }
-
-    // We store the access token as base64 in a cookie so we can use it later to get the user info
-    // This shouldnt be a problem :D
-    string base64AccessToken = Convert.ToBase64String(Encoding.UTF8.GetBytes(discordApi.AccessToken));
-
-    HttpContext.Response.Cookies.Append(key, base64AccessToken, new CookieOptions
-    {
-        IsEssential = true,
-        Path = "/",
-        HttpOnly = true,
-        Secure = true,
-        Expires = DateTimeOffset.Now.Add(TimeSpan.FromSeconds(604800)),
-        SameSite = SameSiteMode.Lax,
-    });
-
-    return Redirect("/auth/application");
-}
     
     // [HttpGetBypass("api/userinfo")]
     // public async Task<dynamic?> UserInfo()
