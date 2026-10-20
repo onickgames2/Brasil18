@@ -12,21 +12,13 @@ COPY frontend/ ./
 RUN npm run build
 
 
-# ==========================================
-# 2. Compilar o backend
-# ==========================================
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS backend-build
+# Backend
+COPY --from=backend-build /app/publish .
+COPY --from=backend-build /src/Roblox/Roblox.Website/Keys /app/Keys
 
-WORKDIR /src
-
-COPY . .
-
-RUN dotnet restore Roblox/Roblox.sln
-
-RUN dotnet publish Roblox/Roblox.Website/Roblox.Website.csproj \
-    -c Release \
-    -o /app/publish \
-    --no-restore
+# Arquivos estáticos necessários ao backend
+RUN mkdir -p /app/public
+COPY api/public/ /app/public/
 
 
 # ==========================================
