@@ -71,13 +71,15 @@ Roblox.Configuration.DiscordGuildId = configuration.GetSection("Discord:GuildId"
 Roblox.Configuration.DiscordBotToken = configuration.GetSection("Discord:BotToken").Value!;
 Roblox.Configuration.DiscordLogChannelId = configuration.GetSection("Discord:LogChannelId").Value!;
 var appCallbackPath = configuration.GetSection("Discord:ApplicationCallback").Value;
-if (string.IsNullOrWhiteSpace(appCallbackPath))
-    appCallbackPath = "/api/applicationcallback";
+string DiscordPath(string key, string fallback)
+{
+    var value = configuration.GetSection(key).Value;
+    return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+}
 
-Roblox.Configuration.DiscordApplicationCallback = Roblox.Configuration.BaseUrl + appCallbackPath.Trim();
-Roblox.Configuration.DiscordLoginCallback = Roblox.Configuration.BaseUrl + configuration.GetSection("Discord:LoginCallback").Value;
-Roblox.Configuration.DiscordLinkCallback = Roblox.Configuration.BaseUrl + configuration.GetSection("Discord:LinkCallback").Value;
-
+Roblox.Configuration.DiscordApplicationCallback = Roblox.Configuration.BaseUrl + DiscordPath("Discord:ApplicationCallback", "/api/applicationcallback");
+Roblox.Configuration.DiscordLoginCallback = Roblox.Configuration.BaseUrl + DiscordPath("Discord:LoginCallback", "/auth/discord-login");
+Roblox.Configuration.DiscordLinkCallback = Roblox.Configuration.BaseUrl + DiscordPath("Discord:LinkCallback", "/bot/verify");
 Console.WriteLine($"[DISCORD DEBUG] BaseUrl: {Roblox.Configuration.BaseUrl}");
 Console.WriteLine($"[DISCORD DEBUG] ApplicationCallback: {Roblox.Configuration.DiscordApplicationCallback}");
 Console.WriteLine($"[DISCORD DEBUG] LoginCallback: {Roblox.Configuration.DiscordLoginCallback}");
