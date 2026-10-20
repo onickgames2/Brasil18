@@ -56,7 +56,7 @@ public class WebController : ControllerBase
 
     [HttpGetBypass("api/logincallback")]
     public async Task<IActionResult> DiscordLoginCallBack(string? code = null, string? error = null)
-{
+    {
     // If we already have a session lets redirect
     if (userSession != null)
         return Redirect("/home");
