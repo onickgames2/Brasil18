@@ -70,7 +70,20 @@ Roblox.Configuration.DiscordClientSecret = configuration.GetSection("Discord:Cli
 Roblox.Configuration.DiscordGuildId = configuration.GetSection("Discord:GuildId").Value!;
 Roblox.Configuration.DiscordBotToken = configuration.GetSection("Discord:BotToken").Value!;
 Roblox.Configuration.DiscordLogChannelId = configuration.GetSection("Discord:LogChannelId").Value!;
-Roblox.Configuration.DiscordApplicationCallback = Roblox.Configuration.BaseUrl + (configuration.GetSection("Discord:ApplicationCallback").Value ?? "/api/applicationcallback");
+var appCallbackPath = configuration.GetSection("Discord:ApplicationCallback").Value;
+if (string.IsNullOrWhiteSpace(appCallbackPath))
+    appCallbackPath = "/api/applicationcallback";
+
+Roblox.Configuration.DiscordApplicationCallback = Roblox.Configuration.BaseUrl + appCallbackPath.Trim();
+Roblox.Configuration.DiscordLoginCallback = Roblox.Configuration.BaseUrl + configuration.GetSection("Discord:LoginCallback").Value;
+Roblox.Configuration.DiscordLinkCallback = Roblox.Configuration.BaseUrl + configuration.GetSection("Discord:LinkCallback").Value;
+
+Console.WriteLine($"[DISCORD DEBUG] BaseUrl: {Roblox.Configuration.BaseUrl}");
+Console.WriteLine($"[DISCORD DEBUG] ApplicationCallback: {Roblox.Configuration.DiscordApplicationCallback}");
+Console.WriteLine($"[DISCORD DEBUG] LoginCallback: {Roblox.Configuration.DiscordLoginCallback}");
+Console.WriteLine($"[DISCORD DEBUG] LinkCallback: {Roblox.Configuration.DiscordLinkCallback}");
+Console.WriteLine($"[DISCORD DEBUG] ClientId definido: {!string.IsNullOrWhiteSpace(Roblox.Configuration.DiscordClientId)}");
+Console.WriteLine($"[DISCORD DEBUG] ClientSecret definido: {!string.IsNullOrWhiteSpace(Roblox.Configuration.DiscordClientSecret)}");
 Roblox.Configuration.DiscordLoginCallback = Roblox.Configuration.BaseUrl + configuration.GetSection("Discord:LoginCallback").Value;
 Roblox.Configuration.DiscordLinkCallback = Roblox.Configuration.BaseUrl + configuration.GetSection("Discord:LinkCallback").Value;
 Roblox.Configuration.GameServerAuthorization = configuration.GetSection("GameServerAuthorization").Value!;
