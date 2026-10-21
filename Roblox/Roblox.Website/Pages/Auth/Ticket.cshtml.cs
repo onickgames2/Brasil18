@@ -15,7 +15,7 @@ public class Ticket : RobloxPageModel
     public string? subject { get; set; }
     [BindProperty]
     public string? body { get; set; }
-    [FromForm(Name = "cf-turnstile-response")]
+    [FromForm(Name = "h-captcha-response")]
     public string hCaptchaResponse { get; set; }
     
 
