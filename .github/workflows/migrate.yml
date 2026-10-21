@@ -33,6 +33,10 @@ jobs:
           mkdir -p /tmp/migrate
           cp -r "${{ steps.find.outputs.dir }}" /tmp/migrate/migrations
           cd /tmp/migrate
+
+          # Pastas que as migrations esperam encontrar (caminhos relativos ao cwd)
+          mkdir -p public/images/groups
+
           npm init -y > /dev/null
           npm install knex pg --no-audit --no-fund
           for f in migrations/*.js; do
@@ -41,6 +45,10 @@ jobs:
               sed -i -E 's/^export async function (up|down)\(/exports.\1 = async function (/; s/^export function (up|down)\(/exports.\1 = function (/' "$f"
             fi
           done
+
+          # Torna mkdirSync(...) simples recursivo, para não falhar por pasta pai ausente
+          sed -i -E 's/mkdirSync\(([^,()]+)\)/mkdirSync(\1, { recursive: true })/g' migrations/*.js
+
           cat > knexfile.cjs <<'EOF'
           module.exports = {
             client: 'pg',
