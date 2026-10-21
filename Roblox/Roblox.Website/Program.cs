@@ -173,8 +173,6 @@ builder.Services.AddMvc(c =>
     c.Conventions.Add(new ApiExplorerGetsOnlyConvention())
 );
 
-builder.Services.AddHttpClient<HCaptchaService>();
-
 var app = builder.Build();
 app.UseRouting();
 app.UseSwaggerUI(c =>
