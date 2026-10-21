@@ -49,6 +49,11 @@ jobs:
           # Torna mkdirSync(...) simples recursivo, para não falhar por pasta pai ausente
           sed -i -E 's/mkdirSync\(([^,()]+)\)/mkdirSync(\1, { recursive: true })/g' migrations/*.js
 
+          # A tabela real se chama "user" (singular); essa migration aponta para "users"
+          sed -i -E 's/inTable\((["'"'"'`])users\1\)/inTable(\1user\1)/g; s/references\((["'"'"'`])users\.id\1\)/references(\1user.id\1)/g' migrations/20250901101938_add_referred_by_to_join_application.js
+          echo "--- referencias na migration apos ajuste ---"
+          grep -nE 'inTable|references' migrations/20250901101938_add_referred_by_to_join_application.js || true
+
           cat > knexfile.cjs <<'EOF'
           module.exports = {
             client: 'pg',
@@ -93,6 +98,8 @@ jobs:
               await client.connect();
               const r = await client.query('select current_user, current_database()');
               console.log('CONNECTED:', JSON.stringify(r.rows[0]));
+              const t = await client.query("select table_schema, table_name from information_schema.tables where table_schema not in ('pg_catalog','information_schema') and table_name in ('user','users','join_application') order by 1,2");
+              console.log('TABLES:', JSON.stringify(t.rows));
             } catch (e) {
               console.log('CONNECT FAILED:', e.message);
             } finally {
