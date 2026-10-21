@@ -58,7 +58,7 @@ public class Application : RobloxPageModel
     public string robloxUsername { get; set; }
     [BindProperty]
     public string? referralCode { get; set; }
-    [FromForm(Name = "h-captcha-response")]
+    [FromForm(Name = "cf-turnstile-response")]
     public string hCaptchaResponse { get; set; }
     public string? verificationPhrase { get; set; }
     [BindProperty]
