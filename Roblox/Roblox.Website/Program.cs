@@ -77,9 +77,10 @@ string DiscordPath(string key, string fallback)
     return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
 }
 
-Roblox.Configuration.DiscordApplicationCallback = Roblox.Configuration.BaseUrl + DiscordPath("Discord:ApplicationCallback", "/api/applicationcallback");
-Roblox.Configuration.DiscordLoginCallback = Roblox.Configuration.BaseUrl + DiscordPath("Discord:LoginCallback", "/auth/discord-login");
-Roblox.Configuration.DiscordLinkCallback = Roblox.Configuration.BaseUrl + DiscordPath("Discord:LinkCallback", "/bot/verify");
+Roblox.Configuration.DiscordApplicationCallback = Roblox.Configuration.BaseUrl + "/api/applicationcallback";
+Roblox.Configuration.DiscordLoginCallback = Roblox.Configuration.BaseUrl + "/api/logincallback";
+Roblox.Configuration.DiscordLinkCallback = Roblox.Configuration.BaseUrl + "/bot/verify";
+
 Console.WriteLine($"[DISCORD DEBUG] BaseUrl: {Roblox.Configuration.BaseUrl}");
 Console.WriteLine($"[DISCORD DEBUG] ApplicationCallback: {Roblox.Configuration.DiscordApplicationCallback}");
 Console.WriteLine($"[DISCORD DEBUG] LoginCallback: {Roblox.Configuration.DiscordLoginCallback}");
