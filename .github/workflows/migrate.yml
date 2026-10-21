@@ -56,6 +56,44 @@ jobs:
           };
           EOF
 
+      - name: Diagnose connection (does not print the password)
+        working-directory: /tmp/migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          cat > diag.cjs <<'EOF'
+          const { Client } = require('pg');
+          const raw = process.env.DATABASE_URL || '';
+          console.log('secret empty?', raw.length === 0);
+          console.log('secret length:', raw.length);
+          try {
+            const u = new URL(raw);
+            const pass = decodeURIComponent(u.password);
+            console.log('user:', decodeURIComponent(u.username));
+            console.log('host:', u.hostname);
+            console.log('port:', u.port);
+            console.log('database:', u.pathname);
+            console.log('password length:', pass.length);
+            console.log('password has space:', /\s/.test(pass));
+            console.log('password has brackets:', /[\[\]]/.test(pass));
+          } catch (e) {
+            console.log('URL parse error:', e.message);
+          }
+          (async () => {
+            const client = new Client({ connectionString: raw, ssl: { rejectUnauthorized: false } });
+            try {
+              await client.connect();
+              const r = await client.query('select current_user, current_database()');
+              console.log('CONNECTED:', JSON.stringify(r.rows[0]));
+            } catch (e) {
+              console.log('CONNECT FAILED:', e.message);
+            } finally {
+              await client.end().catch(() => {});
+            }
+          })();
+          EOF
+          node diag.cjs
+
       - name: Run migrations
         working-directory: /tmp/migrate
         env:
