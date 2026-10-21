@@ -87,6 +87,15 @@ Console.WriteLine($"[DISCORD DEBUG] LoginCallback: {Roblox.Configuration.Discord
 Console.WriteLine($"[DISCORD DEBUG] LinkCallback: {Roblox.Configuration.DiscordLinkCallback}");
 Console.WriteLine($"[DISCORD DEBUG] ClientId definido: {!string.IsNullOrWhiteSpace(Roblox.Configuration.DiscordClientId)}");
 Console.WriteLine($"[DISCORD DEBUG] ClientSecret definido: {!string.IsNullOrWhiteSpace(Roblox.Configuration.DiscordClientSecret)}");
+foreach (var requiredKey in new[]
+{
+    "VerificationSecret", "Jwt:Sessions", "Authorization", "GameServerAuthorization",
+    "BotAuthorization", "RccAuthorization", "ArbiterAuthorization", "UserAgentBypassSecret",
+    "HCaptcha:Public", "HCaptcha:Private"
+})
+{
+    Console.WriteLine($"[CONFIG DEBUG] {requiredKey} definido: {!string.IsNullOrWhiteSpace(configuration[requiredKey])}");
+}
 Roblox.Configuration.GameServerAuthorization = configuration.GetSection("GameServerAuthorization").Value!;
 Roblox.Configuration.BotAuthorization = configuration.GetSection("BotAuthorization").Value!;
 Roblox.Configuration.RccAuthorization = configuration.GetSection("RccAuthorization").Value!;
