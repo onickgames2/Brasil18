@@ -60,6 +60,10 @@ RUN if [ -d /app/public/css/Roblox ]; then \
 RUN test -d /app/public/css/roblox
 RUN ls -la /app/public/css/roblox/
 
+# Dados JSON
+COPY --from=backend-build /src/JsonData/ /app/JsonData/
+RUN test -f /app/JsonData/avatar-colors.json
+
 # Frontend compilado
 WORKDIR /app/Frontend
 
