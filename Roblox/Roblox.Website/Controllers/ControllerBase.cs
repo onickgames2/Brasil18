@@ -154,11 +154,18 @@ namespace Roblox.Website.Controllers
             // Check for cloudflare
             var headers = ctx.Request.Headers;
             if (headers.ContainsKey("cf-connecting-ip"))
-            {
-                return headers["cf-connecting-ip"]!;
-            }
+{
+    return headers["cf-connecting-ip"]!;
+}
 
-            var ipString = ctx.Connection.RemoteIpAddress?.ToString();
+if (headers.ContainsKey("x-forwarded-for"))
+{
+    var first = headers["x-forwarded-for"].ToString().Split(',')[0].Trim();
+    if (!string.IsNullOrEmpty(first))
+        return first;
+}
+
+var ipString = ctx.Connection.RemoteIpAddress?.ToString();
             if (string.IsNullOrEmpty(ipString))
                 throw new Exception("Bad IP address - empty or null string");
             return ipString;
