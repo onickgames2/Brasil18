@@ -62,8 +62,8 @@
           }
         ]
       },
-      "baseUrl": "https://www.roblox.com",
-      "apiFormat": "https://www.roblox.com/apisite/{0}{1}"
+      "baseUrl": "https://brasil17-backend.onrender.com",
+      "apiFormat": "https://brasil17-backend.onrender.com/apisite/{0}{1}"
     }
   }
 }
