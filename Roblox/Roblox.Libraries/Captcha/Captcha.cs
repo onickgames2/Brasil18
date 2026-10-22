@@ -24,7 +24,7 @@ public class HCaptcha
                 {"sitekey", Roblox.Configuration.HCaptchaPublicKey},
             });
 
-            var result = await client.PostAsync("https://api.hcaptcha.com/siteverify", cont);
+            var result = await client.PostAsync("https://challenges.cloudflare.com/turnstile/v0/siteverify", cont);
             var str = await result.Content.ReadAsStringAsync();
             if (result.StatusCode != HttpStatusCode.OK)
             {
