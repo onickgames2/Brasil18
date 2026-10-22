@@ -44,7 +44,7 @@
                     {
                         <p><a href="/auth/password-reset">Reset Password</a></p>
                     }
-                    <div class="h-captcha text-center mt-4 mb-2" data-sitekey="@Model.siteKey" data-theme="dark"></div>
+                    <div class="cf-turnstile text-center mt-4 mb-2" data-sitekey="@Model.siteKey" data-theme="dark"></div>
                     @Html.AntiForgeryToken()
                     <div class="d-grid gap-2 mt-4 mb-4">
                         <input disabled="@Model.loginDisabled" class="btn btn-primary btn-custom" type="submit" value="Login" id="login-submit"/>
