@@ -10,7 +10,7 @@ public class Captcha : RobloxPageModel
 {
     public string siteKey => Roblox.Configuration.HCaptchaPublicKey;
 
-    [FromForm(Name = "h-captcha-response")]
+    [FromForm(Name = "cf-turnstile-response")]
     public string hCaptchaResponse { get; set; }
 
 
