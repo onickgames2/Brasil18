@@ -168,8 +168,7 @@
                                 <h4>Step 6 - Captcha</h4>
                                 <div class="p-2">
                                     <p class="mb-0">We just have to make sure you aren't a robot.</p>
-                                    <div class="h-captcha mt-4" data-sitekey="@Model.siteKey" data-theme="dark"></div>
-                                </div>
+                                    <div class="cf-turnstile mt-4" data-sitekey="@Model.siteKey" data-theme="dark"></div>                                </div>
                                 @Html.AntiForgeryToken()
                             </div>
                         </div>
@@ -186,4 +185,4 @@
     </div>
 </div>
 
-<script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
