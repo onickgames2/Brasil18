@@ -368,7 +368,6 @@ namespace Roblox.Website.Controllers
             // will be removed later this is just a hack to get the website to work :sob:
             HttpContext.Response.Cookies.Append(Middleware.SessionMiddleware.CookieName, sessionCookie, new CookieOptions()
             {
-                Domain = ".silrev.biz",
                 Secure = false,
                 Expires = DateTimeOffset.Now.Add(TimeSpan.FromDays(364)),
                 IsEssential = true,
