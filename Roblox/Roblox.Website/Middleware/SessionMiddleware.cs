@@ -88,14 +88,7 @@ public class SessionMiddleware
                 if (string.IsNullOrWhiteSpace(cookie))
                 {
                     authTimer.Stop();
-                    // cookie vazio
                     await OnBadSession(ctx, "cookie empty");
-
-                    // no catch (RecordNotFoundException)
-                    await OnBadSession(ctx, "session or user not found");
-
-                    // no if do status Forgotten/MustValidateEmail
-                    await OnBadSession(ctx, "account status");
                     return;
                 }
                 var decodedResult = DecodeJwt<JwtEntry>(cookie);
@@ -114,13 +107,13 @@ public class SessionMiddleware
                     catch (RecordNotFoundException)
                     {
                         authTimer.Stop();
-                        await OnBadSession(ctx);
+                        await OnBadSession(ctx, "session or user not found");
                         return;
                     }
                     if (userInfo.accountStatus is AccountStatus.Forgotten or AccountStatus.MustValidateEmail)
                     {
                         authTimer.Stop();
-                        await OnBadSession(ctx);
+                        await OnBadSession(ctx, "account status");
                         return; // Don't add session - pretend user doesn't exist
                     }
 
