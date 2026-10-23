@@ -168,9 +168,9 @@ public class SessionMiddleware
         }
         catch (System.Exception e) when (e is InvalidTokenPartsException or NullReferenceException or FormatException or SignatureVerificationException)
         {
-            ctx.Response.Cookies.Delete(CookieName);
+           Console.WriteLine($"[SESSION DEBUG] jwt error: {e.GetType().Name} {e.Message}");
+           ctx.Response.Cookies.Delete(CookieName);
         }
-        await _next(ctx);
     }
 }
 
