@@ -70,11 +70,11 @@ public class SessionMiddleware
 
     private async Task OnBadSession(HttpContext ctx, string reason)
     {
-    Console.WriteLine($"[SESSION DEBUG] cookie deleted: {reason}");
-    ctx.Response.Cookies.Delete(CookieName);
-    await _next(ctx);
+        Console.WriteLine($"[SESSION DEBUG] cookie deleted: {reason}");
+        ctx.Response.Cookies.Delete(CookieName);
+        await _next(ctx);
     }
-    
+
     public async Task InvokeAsync(HttpContext ctx)
     {
         var authTimer = new MiddlewareTimer(ctx, "au");
@@ -97,7 +97,7 @@ public class SessionMiddleware
                 {
                     using var users = ServiceProvider.GetOrCreate<UsersService>();
                     using var accountInformation = ServiceProvider.GetOrCreate<AccountInformationService>();
-                    
+
                     UserInfo userInfo;
                     try
                     {
@@ -172,8 +172,6 @@ public class SessionMiddleware
             ctx.Response.Cookies.Delete(CookieName);
         }
         await _next(ctx);
-    }
-}
     }
 }
 
