@@ -126,15 +126,46 @@ namespace Roblox.Rendering
                     renderRequest.animationUrl = animationUrl;
                     url = "catalog/animation";
                     break;
+                default:
+                    Console.WriteLine($"[RenderingHandler] Tipo de render não suportado: {type}");
+                    return "FAILURE";
             }
+
+            string baseUrl = Environment.GetEnvironmentVariable("RENDER_BASE_URL") ?? "http://localhost:7832/";
+            if (!baseUrl.EndsWith("/")) baseUrl += "/";
+            string fullUrl = baseUrl + url;
+
+            try
+            {
             // i will add error handling to this later
             var content = new StringContent(JsonSerializer.Serialize(renderRequest), Encoding.UTF8, "application/json");
-            HttpResponseMessage response = await client.PostAsync("http://176.100.36.98:7832/" + url, content);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            HttpResponseMessage response = await client.PostAsync(fullUrl, content, cts.Token);
+            string body = await response.Content.ReadAsStringAsync();
             sw.Stop();
-            var request = await response.Content.ReadFromJsonAsync<RenderResponse>();
-            Console.WriteLine($"[RenderingHandler] Request took {sw.ElapsedMilliseconds}ms");
-            return request?.data ?? "FAILURE";
-        }
+
+            Console.WriteLine($"[RenderingHandler] POST {fullUrl} -> {(int)response.StatusCode} em {sw.ElapsedMilliseconds}ms");
+                
+            if (!response.IsSuccessStatusCode)
+            {
+            Console.WriteLine($"[RenderingHandler] Erro do servidor de render: {body}");
+            return "FAILURE";
+            }
+                var result = JsonSerializer.Deserialize<RenderResponse>(body);
+            if (result == null || !result.success || string.IsNullOrEmpty(result.data))
+            {
+            Console.WriteLine($"[RenderingHandler] Render falhou: {result?.message ?? body}");
+            return "FAILURE";
+            }
+            return result.data;
+            }
+            catch (Exception ex)
+            {
+            Console.WriteLine($"[RenderingHandler] Exceção ao chamar {fullUrl}: {ex.Message}");
+            return "FAILURE";
+            }
+            
+      }
 
         public static async Task<string> RequestHatThumbnail(long assetId)
         {
