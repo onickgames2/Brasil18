@@ -74,6 +74,8 @@ public class SessionMiddleware
         await _next(ctx);
     }
 
+    Console.WriteLine($"[SESSION DEBUG] path={currentPath} cookie={ctx.Request.Cookies.ContainsKey(CookieName)}");
+    
     public async Task InvokeAsync(HttpContext ctx)
     {
         var authTimer = new MiddlewareTimer(ctx, "au");
