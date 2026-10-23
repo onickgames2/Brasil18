@@ -73,13 +73,12 @@ public class SessionMiddleware
         ctx.Response.Cookies.Delete(CookieName);
         await _next(ctx);
     }
-
-    Console.WriteLine($"[SESSION DEBUG] path={currentPath} cookie={ctx.Request.Cookies.ContainsKey(CookieName)}");
     
     public async Task InvokeAsync(HttpContext ctx)
     {
         var authTimer = new MiddlewareTimer(ctx, "au");
         var currentPath = ctx.Request.Path.ToString().ToLower();
+        Console.WriteLine($"[SESSION DEBUG] path={currentPath} cookie={ctx.Request.Cookies.ContainsKey(CookieName)}");
         try
         {
             if (ctx.Request.Cookies.ContainsKey(CookieName))
