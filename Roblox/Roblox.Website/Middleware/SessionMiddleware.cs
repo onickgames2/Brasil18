@@ -88,7 +88,14 @@ public class SessionMiddleware
                 if (string.IsNullOrWhiteSpace(cookie))
                 {
                     authTimer.Stop();
-                    await OnBadSession(ctx);
+                    // cookie vazio
+                    await OnBadSession(ctx, "cookie empty");
+
+                    // no catch (RecordNotFoundException)
+                    await OnBadSession(ctx, "session or user not found");
+
+                    // no if do status Forgotten/MustValidateEmail
+                    await OnBadSession(ctx, "account status");
                     return;
                 }
                 var decodedResult = DecodeJwt<JwtEntry>(cookie);
@@ -168,9 +175,12 @@ public class SessionMiddleware
         }
         catch (System.Exception e) when (e is InvalidTokenPartsException or NullReferenceException or FormatException or SignatureVerificationException)
         {
-           Console.WriteLine($"[SESSION DEBUG] jwt error: {e.GetType().Name} {e.Message}");
-           ctx.Response.Cookies.Delete(CookieName);
+            Console.WriteLine($"[SESSION DEBUG] jwt error: {e.GetType().Name} {e.Message}");
+            ctx.Response.Cookies.Delete(CookieName);
         }
+        await _next(ctx);
+    }
+}
     }
 }
 
