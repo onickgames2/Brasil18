@@ -68,10 +68,11 @@ public class SessionMiddleware
         return result;
     }
 
-    private async Task OnBadSession(HttpContext ctx)
+    private async Task OnBadSession(HttpContext ctx, string reason)
     {
-        ctx.Response.Cookies.Delete(CookieName);
-        await _next(ctx);
+    Console.WriteLine($"[SESSION DEBUG] cookie deleted: {reason}");
+    ctx.Response.Cookies.Delete(CookieName);
+    await _next(ctx);
     }
     
     public async Task InvokeAsync(HttpContext ctx)
