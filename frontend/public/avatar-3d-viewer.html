@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avatar 3D</title>
+<style>
+  :root {
+    --fundo: #1d2024;
+    --fundo-claro: #2a2e34;
+    --texto: #e8eaed;
+    --texto-suave: #9aa0a8;
+    --destaque: #6fb3ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --fundo: #e9edf2;
+      --fundo-claro: #ffffff;
+      --texto: #1b1f24;
+      --texto-suave: #5b6570;
+      --destaque: #1f6fd1;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--fundo); color: var(--texto);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  #cena { position: fixed; inset: 0; touch-action: none; }
+  #cena canvas { display: block; width: 100%; height: 100%; }
+  #status { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 24px; text-align: center; color: var(--texto-suave); pointer-events: none; }
+  #status.erro { color: var(--texto); }
+  #status[hidden] { display: none; }
+  #controles { position: fixed; right: 10px; bottom: 10px; display: flex; gap: 6px; }
+  #controles button { appearance: none; border: 0; border-radius: 8px; padding: 8px 12px;
+    background: var(--fundo-claro); color: var(--texto); font: inherit; cursor: pointer; }
+  #controles button[aria-pressed="true"] { outline: 2px solid var(--destaque); }
+  #controles button:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<div id="cena" aria-label="Avatar 3D. Arraste para girar, role ou pince para aproximar."></div>
+<div id="status" role="status">Carregando avatar...</div>
+<div id="controles">
+  <button id="btnGirar" type="button" aria-pressed="true">Girar sozinho</button>
+  <button id="btnReset" type="button">Centralizar</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
+<script>
+/*
+ * COMO USAR
+ *   avatar-3d-viewer.html?userId=3
+ *   avatar-3d-viewer.html?userId=3&base=https://brasil17-backend.onrender.com
+ *   avatar-3d-viewer.html?json=https://.../hash_thumbnail3d.json   (pula a chamada da API)
+ *
+ * Para embutir em outra página:
+ *   <iframe src="/avatar-3d-viewer.html?userId=3" style="border:0;width:420px;height:420px"></iframe>
+ */
+
+// Endereço do backend (onde ficam /apisite e /images). Vazio = mesma origem da página.
+const API_BASE_PADRAO = "";
+
+const params = new URLSearchParams(location.search);
+const API_BASE = (params.get("base") || API_BASE_PADRAO).replace(/\/+$/, "");
+const USER_ID = params.get("userId");
+const JSON_DIRETO = params.get("json");
+
+const elCena = document.getElementById("cena");
+const elStatus = document.getElementById("status");
+const btnGirar = document.getElementById("btnGirar");
+const btnReset = document.getElementById("btnReset");
+
+function mostrarStatus(texto, erro) {
+  elStatus.textContent = texto;
+  elStatus.className = erro ? "erro" : "";
+  elStatus.hidden = false;
+}
+function esconderStatus() { elStatus.hidden = true; }
+
+// "/images/thumbnails/3d/abc" -> "https://backend/images/thumbnails/3d/abc"
+function resolverUrl(url) {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith("/")) return API_BASE + url;
+  return url;
+}
+
+async function pegarJson(url) {
+  const r = await fetch(url, { credentials: API_BASE ? "include" : "same-origin" });
+  if (!r.ok) throw new Error("HTTP " + r.status + " em " + url);
+  return r.json();
+}
+
+// Pede o JSON do avatar 3D ao backend (com novas tentativas enquanto estiver "Pending").
+async function obterUrlDoJson3D() {
+  if (JSON_DIRETO) return resolverUrl(JSON_DIRETO);
+  if (!USER_ID) throw new Error("Faltou o parâmetro userId na URL.");
+
+  const api = API_BASE + "/apisite/thumbnails/v1/users/avatar-3d?userIds=" +
+    encodeURIComponent(USER_ID) + "&size=420x420&format=png";
+
+  for (let i = 0; i < 12; i++) {
+    const resp = await pegarJson(api);
+    const item = resp && resp.data && resp.data[0];
+    if (item && item.state === "Completed" && item.imageUrl) return resolverUrl(item.imageUrl);
+    if (item && (item.state === "Blocked" || item.state === "Error"))
+      throw new Error("O avatar 3D não está disponível (estado: " + item.state + ").");
+    mostrarStatus("Gerando o avatar 3D...");
+    await new Promise(function (ok) { setTimeout(ok, 1500); });
+  }
+  throw new Error("O avatar 3D demorou demais para ficar pronto.");
+}
+
+// ---------- cena ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+elCena.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 5000);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x666a70, 1.0));
+const luz = new THREE.DirectionalLight(0xffffff, 0.9);
+luz.position.set(2, 4, 3);
+scene.add(luz);
+
+const controles = new THREE.OrbitControls(camera, renderer.domElement);
+controles.enableDamping = true;
+controles.enablePan = false;
+controles.autoRotateSpeed = 2.0;
+
+const semMovimento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+controles.autoRotate = !semMovimento;
+btnGirar.setAttribute("aria-pressed", String(controles.autoRotate));
+
+btnGirar.addEventListener("click", function () {
+  controles.autoRotate = !controles.autoRotate;
+  btnGirar.setAttribute("aria-pressed", String(controles.autoRotate));
+});
+
+let posicaoInicial = null;
+btnReset.addEventListener("click", function () {
+  if (!posicaoInicial) return;
+  camera.position.copy(posicaoInicial.pos);
+  controles.target.copy(posicaoInicial.alvo);
+  controles.update();
+});
+
+function redimensionar() {
+  const w = elCena.clientWidth || window.innerWidth;
+  const h = elCena.clientHeight || window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", redimensionar);
+redimensionar();
+
+(function animar() {
+  requestAnimationFrame(animar);
+  controles.update();
+  renderer.render(scene, camera);
+})();
+
+// ---------- texturas ----------
+// O .mtl referencia as texturas pelos nomes originais, mas o servidor pode ter renomeado os arquivos.
+// Este mapeamento tenta casar pelo nome e, se não achar, usa a ordem da lista.
+function criarGerenciador(texturas) {
+  const manager = new THREE.LoadingManager();
+  let contador = 0;
+  manager.setURLModifier(function (url) {
+    if (!texturas.length) return url;
+    if (!/\.(png|jpg|jpeg|webp)$/i.test(url) && url.indexOf("tex") === -1 && url.indexOf("/3d/") === -1) {
+      return url;
+    }
+    const base = url.split("/").pop().replace(/\.[a-z0-9]+$/i, "");
+    const achada = texturas.find(function (t) { return base && t.indexOf(base) !== -1; });
+    if (achada) return achada;
+    if (texturas.length === 1) return texturas[0];
+    return texturas[contador++ % texturas.length];
+  });
+  return manager;
+}
+
+function aplicarTexturasFaltantes(objeto, texturas) {
+  if (!texturas.length) return;
+  const loader = new THREE.TextureLoader();
+  let i = 0;
+  objeto.traverse(function (no) {
+    if (!no.isMesh) return;
+    const lista = Array.isArray(no.material) ? no.material : [no.material];
+    lista.forEach(function (m) {
+      if (!m || m.map) return;
+      const tex = loader.load(texturas[i % texturas.length]);
+      tex.encoding = THREE.sRGBEncoding;
+      m.map = tex;
+      m.color && m.color.set(0xffffff);
+      m.needsUpdate = true;
+      i++;
+    });
+  });
+}
+
+function ajustarMateriais(objeto) {
+  objeto.traverse(function (no) {
+    if (!no.isMesh) return;
+    const lista = Array.isArray(no.material) ? no.material : [no.material];
+    lista.forEach(function (m) {
+      if (!m) return;
+      m.side = THREE.DoubleSide;
+      if (m.map) {
+        m.map.encoding = THREE.sRGBEncoding;
+        m.alphaTest = 0.1; // recorta partes transparentes de acessórios sem borrar
+      }
+    });
+  });
+}
+
+// ---------- enquadramento ----------
+function enquadrar(objeto, dados) {
+  const caixa = new THREE.Box3().setFromObject(objeto);
+  const centro = caixa.getCenter(new THREE.Vector3());
+  const tamanho = caixa.getSize(new THREE.Vector3());
+  const maior = Math.max(tamanho.x, tamanho.y, tamanho.z) || 1;
+
+  const fov = (dados.camera && dados.camera.fov) ? dados.camera.fov : 50;
+  camera.fov = Math.min(Math.max(fov, 30), 80);
+  const distancia = (maior / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.25;
+
+  // direção de olhar vinda do servidor, se existir
+  let dir = new THREE.Vector3(0.3, 0.15, 1).normalize();
+  const d = dados.camera && dados.camera.direction;
+  if (d && isFinite(d.x) && isFinite(d.y) && isFinite(d.z)) {
+    const v = new THREE.Vector3(d.x, d.y, d.z);
+    if (v.lengthSq() > 0) dir = v.normalize().multiplyScalar(-1);
+  }
+
+  camera.position.copy(centro).add(dir.multiplyScalar(distancia));
+  camera.near = distancia / 100;
+  camera.far = distancia * 20;
+  camera.updateProjectionMatrix();
+
+  controles.target.copy(centro);
+  controles.minDistance = distancia * 0.4;
+  controles.maxDistance = distancia * 2.5;
+  controles.update();
+
+  posicaoInicial = { pos: camera.position.clone(), alvo: centro.clone() };
+}
+
+// ---------- carregamento ----------
+function carregarMtl(loader, url) {
+  return new Promise(function (ok, falha) { loader.load(url, ok, undefined, falha); });
+}
+function carregarObj(loader, url) {
+  return new Promise(function (ok, falha) { loader.load(url, ok, undefined, falha); });
+}
+
+async function iniciar() {
+  try {
+    mostrarStatus("Carregando avatar...");
+    const urlJson = await obterUrlDoJson3D();
+    const dados = await pegarJson(urlJson);
+
+    if (!dados.obj) throw new Error("O JSON do avatar não tem o arquivo .obj.");
+
+    const texturas = (dados.textures || []).map(resolverUrl);
+    const manager = criarGerenciador(texturas);
+
+    const objLoader = new THREE.OBJLoader(manager);
+
+    if (dados.mtl) {
+      try {
+        const mtlLoader = new THREE.MTLLoader(manager);
+        mtlLoader.setMaterialOptions({ side: THREE.DoubleSide });
+        const materiais = await carregarMtl(mtlLoader, resolverUrl(dados.mtl));
+        materiais.preload();
+        objLoader.setMaterials(materiais);
+      } catch (e) {
+        console.warn("Não consegui ler o .mtl, vou usar só as texturas.", e);
+      }
+    }
+
+    const objeto = await carregarObj(objLoader, resolverUrl(dados.obj));
+
+    ajustarMateriais(objeto);
+    aplicarTexturasFaltantes(objeto, texturas);
+    ajustarMateriais(objeto);
+
+    scene.add(objeto);
+    enquadrar(objeto, dados);
+    esconderStatus();
+  } catch (e) {
+    console.error(e);
+    mostrarStatus("Não foi possível carregar o avatar 3D. " + (e && e.message ? e.message : ""), true);
+  }
+}
+
+iniciar();
+</script>
+</body>
+</html>
