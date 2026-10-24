@@ -146,11 +146,9 @@ namespace Roblox.Rendering
                 return await GetRobloxApiThumbnail(id, type == RenderType.Headshot);
             }
 
-            // Avatar 3D não é suportado pela API simples da Roblox
             if (UseRobloxApi && type == RenderType.Avatar3D)
             {
-                Console.WriteLine("[RenderingHandler] Avatar3D não é suportado via Roblox API");
-                return "FAILURE";
+               return await GetRobloxApiThumbnail3D(id);
             }
 
             Stopwatch sw = new Stopwatch();
