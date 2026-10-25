@@ -86,6 +86,54 @@ namespace Roblox.Rendering
             return 1;
         }
 
+        // Retorna a imagem PNG em base64, ou "FAILURE"
+        private static async Task<string> GetRobloxApiThumbnail(long siteUserId, bool headshot)
+        {
+            var sw = Stopwatch.StartNew();
+            long robloxId = await ResolveRobloxUserId(siteUserId);
+            string tipo = headshot ? "avatar-headshot" : "avatar";
+            string apiUrl = $"https://thumbnails.roblox.com/v1/users/{tipo}?userIds={robloxId}&size=420x420&format=Png&isCircular=false";
+
+            for (int tentativa = 0; tentativa < 5; tentativa++)
+            {
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                    string json = await client.GetStringAsync(apiUrl, cts.Token);
+                    using var doc = JsonDocument.Parse(json);
+                    var item = doc.RootElement.GetProperty("data")[0];
+                    string? state = item.GetProperty("state").GetString();
+
+                    if (state == "Completed")
+                    {
+                        string? imageUrl = item.GetProperty("imageUrl").GetString();
+                        if (!string.IsNullOrEmpty(imageUrl))
+                        {
+                            byte[] bytes = await client.GetByteArrayAsync(imageUrl, cts.Token);
+                            sw.Stop();
+                            Console.WriteLine($"[RenderingHandler] Roblox API ({tipo}) user {siteUserId} -> robloxId {robloxId} OK em {sw.ElapsedMilliseconds}ms");
+                            return Convert.ToBase64String(bytes);
+                        }
+                    }
+                    else if (state == "Blocked" || state == "Error")
+                    {
+                        Console.WriteLine($"[RenderingHandler] Roblox API retornou estado {state} para robloxId {robloxId}");
+                        return "FAILURE";
+                    }
+                    // "Pending" ou "InReview": espera e tenta de novo
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[RenderingHandler] Falha na Roblox API (tentativa {tentativa + 1}): {ex.Message}");
+                }
+
+                await Task.Delay(1000);
+            }
+
+            Console.WriteLine($"[RenderingHandler] Roblox API não retornou imagem para robloxId {robloxId}");
+            return "FAILURE";
+        }
+        
         // Converte o hash do CDN da Roblox em URL completa
         private static string RobloxHashToUrl(string hash)
         {
