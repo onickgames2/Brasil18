@@ -10,23 +10,25 @@ namespace Roblox.Website.Filters;
 public class StaffFilter : ActionFilterAttribute, IAsyncActionFilter
 {
     private static List<long> ownerUserId { get; set; } = new List<long>();
-    public static void Configure(List<long> newOwnerUserId){
-    var ids = new List<long>(newOwnerUserId ?? new List<long>());
-{
-    // Extra: IDs de dono vindos da variável de ambiente, separados por vírgula (ex: "1,3")
-    var env = Environment.GetEnvironmentVariable("OWNER_USER_IDS");
-    if (!string.IsNullOrWhiteSpace(env))
-    {
-        foreach (var parte in env.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (long.TryParse(parte, out var id) && !ids.Contains(id))
-                ids.Add(id);
-        }
-    }
 
-    ownerUserId = ids;
-    Console.WriteLine("[info] owner = {0}", string.Join(",", ownerUserId));
-}
+    public static void Configure(List<long> newOwnerUserId)
+    {
+        var ids = new List<long>(newOwnerUserId ?? new List<long>());
+
+        // Extra: IDs de dono vindos da variável de ambiente, separados por vírgula (ex: "1,3")
+        var env = Environment.GetEnvironmentVariable("OWNER_USER_IDS");
+        if (!string.IsNullOrWhiteSpace(env))
+        {
+            foreach (var parte in env.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (long.TryParse(parte, out var id) && !ids.Contains(id))
+                    ids.Add(id);
+            }
+        }
+
+        ownerUserId = ids;
+        Console.WriteLine("[info] owner = {0}", string.Join(",", ownerUserId));
+    }
 
     public static async Task<IEnumerable<long>> GetStaff()
     {
@@ -37,7 +39,7 @@ public class StaffFilter : ActionFilterAttribute, IAsyncActionFilter
         {
             list.Add(staff.userId);
         }
-        
+
         foreach (var owner in ownerUserId)
         {
             list.Add(owner);
@@ -50,7 +52,7 @@ public class StaffFilter : ActionFilterAttribute, IAsyncActionFilter
     {
         return ownerUserId.Contains(userId);
     }
-    
+
     public static async Task<bool> IsStaff(long userId)
     {
         return IsOwner(userId) || (await GetPermissions(userId)).Any();
@@ -63,6 +65,7 @@ public class StaffFilter : ActionFilterAttribute, IAsyncActionFilter
     }
 
     private Access permission { get; set; }
+
     public StaffFilter(Access requiredPermission)
     {
         permission = requiredPermission;
@@ -83,7 +86,7 @@ public class StaffFilter : ActionFilterAttribute, IAsyncActionFilter
             }
         });
     }
-    
+
     public override async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
         // TODO: better error?
@@ -92,8 +95,8 @@ public class StaffFilter : ActionFilterAttribute, IAsyncActionFilter
             await OnFail(context.HttpContext);
             return;
         }
-        
-        var userInfo = (UserSession?) context.HttpContext.Items[SessionMiddleware.CookieName];
+
+        var userInfo = (UserSession?)context.HttpContext.Items[SessionMiddleware.CookieName];
         if (userInfo == null)
         {
             await OnFail(context.HttpContext);
