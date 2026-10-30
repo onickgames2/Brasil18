@@ -3,7 +3,7 @@ import { getTheme, themeType } from "../../services/theme";
 
 const footerLinks = {
   '/about-us': 'About Us',
-  'https://discord.gg/': 'Discord',
+  'https://discord.gg/sp4Ap5D2Fm': 'Discord',
   '/internal/robuxexchange': 'Robux Exchange',
   '/internal/tixexchange': 'Tix Exchange',
   '/auth/tos': 'Terms',
@@ -84,7 +84,7 @@ const Footer = props => {
           })
         }
       </ul>
-      <p className={s.footerNote}>©2025 Marine. Marine is not affliated with Roblox Corporation.</p>
+      <p className={s.footerNote}>©2026 Brasil17. Brasil17 is not affliated with Roblox Corporation.</p>
     </div>
   </footer>
 
@@ -102,7 +102,7 @@ const Footer = props => {
         }
         <div className={'col-12 col-lg-10 ' + s.lowerFooterContainer}>
           <p className={`${s.text} ${s.text2}`}>
-            <a>©2025 Marine. Marine is not affliated with Roblox Corporation.</a>.
+            <a>©2026 Brasil17. Brasil17 is not affliated with Roblox Corporation.</a>.
           </p>
         </div>
       </div>
