@@ -4,7 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.PORT || 7832);
+const PORT = Number(process.env.RENDER_PORT || 7832);
 const MAX_CONCURRENT = Number(process.env.MAX_CONCURRENT || 2);
 const CHROMIUM = process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium";
 
