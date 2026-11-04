@@ -9,6 +9,33 @@ FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 # Porta interna do render server (o RenderingHandler usa localhost:7832 por padrão)
 RENDER_PORT="${RENDER_PORT:-7832}"
 
+FRONTEND_PID=""
+RENDER_PID=""
+
+# Backend (ASP.NET) primeiro, na porta pública
+cd /app || exit 1
+unset ASPNETCORE_HTTP_PORTS
+ASPNETCORE_URLS="http://0.0.0.0:$PUBLIC_PORT" dotnet Roblox.Website.dll &
+BACKEND_PID=$!
+
+# Espera o backend responder antes de abrir as outras portas,
+# senão o Render pode escolher a porta errada como principal.
+echo "⏳ Aguardando o backend..."
+WAITED=0
+until curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$PUBLIC_PORT/"; do
+    if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+        echo "❌ O backend caiu ao iniciar. Veja o erro acima."
+        exit 1
+    fi
+    WAITED=$((WAITED + 2))
+    if [ "$WAITED" -ge 300 ]; then
+        echo "❌ O backend não subiu em 5 minutos."
+        exit 1
+    fi
+    sleep 2
+done
+echo "✅ Backend no ar."
+
 # Frontend (Next.js) na porta interna
 cd /app/Frontend || exit 1
 PORT="$FRONTEND_PORT" npm run start -- --hostname 0.0.0.0 --port "$FRONTEND_PORT" &
@@ -22,12 +49,6 @@ start_render() {
     cd /app || return 1
 }
 start_render
-
-# Backend (ASP.NET) na porta pública
-cd /app || exit 1
-unset ASPNETCORE_HTTP_PORTS
-ASPNETCORE_URLS="http://0.0.0.0:$PUBLIC_PORT" dotnet Roblox.Website.dll &
-BACKEND_PID=$!
 
 terminate() {
     kill "$FRONTEND_PID" "$BACKEND_PID" "$RENDER_PID" 2>/dev/null || true
