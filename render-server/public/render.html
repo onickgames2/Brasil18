@@ -3,6 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <style>html,body{margin:0;background:transparent}</style>
+
+  <!-- PRÉ-LOAD: o navegador começa a baixar tudo em paralelo, antes do script rodar -->
+  <link rel="modulepreload" href="/vendor/three/build/three.module.js" />
+  <link rel="modulepreload" href="/vendor/three/examples/jsm/loaders/GLTFLoader.js" />
+  <link rel="preload" href="/noob.glb" as="fetch" crossorigin />
+
   <script type="importmap">
     {
       "imports": {
@@ -17,6 +23,9 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
+const FOV = 30;
+const MAX_CACHE = 300;
+
 // Cores originais da textura do noob (amarelo = cabeça/braços, azul = torso, verde = pernas)
 const ORIGINAL = {
   skin:  [245, 205, 48],
@@ -24,23 +33,75 @@ const ORIGINAL = {
   legs:  [164, 189, 71],
 };
 
+const DEFAULT_COLORS = { head: "#f5cd30", torso: "#0d69ac", leftLeg: "#a4bd47" };
+
 function hexToRgb(hex) {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-// Troca as cores chapadas da textura pelas cores do usuário (o rosto preto é mantido)
-function recolorTexture(map, colors) {
-  const img = map.image;
-  const w = img.width, h = img.height;
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  ctx.drawImage(img, 0, 0);
+/* ------------------------------------------------------------------ */
+/*  Setup ÚNICO (renderer, cena, luzes, câmera são criados 1 vez só)   */
+/* ------------------------------------------------------------------ */
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setClearColor(0x000000, 0);
 
-  const data = ctx.getImageData(0, 0, w, h);
-  const px = data.data;
+const scene = new THREE.Scene();
+// Luz com mais contraste (sombras mais marcadas, igual ao print de referência)
+scene.add(new THREE.AmbientLight(0xffffff, 0.65 * Math.PI));
+const sun = new THREE.DirectionalLight(0xffffff, 1.0 * Math.PI);
+sun.position.set(4, 8, 6);
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xffffff, 0.25 * Math.PI);
+fill.position.set(-5, 2, 4);
+scene.add(fill);
+
+const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 100);
+
+/* ------------------------------------------------------------------ */
+/*  Modelo base: carregado 1 vez, pixels originais guardados em cache  */
+/* ------------------------------------------------------------------ */
+let base = null; // { model, height, sources: Map<Texture, ImageData> }
+
+async function loadBase() {
+  const gltf = await new GLTFLoader().loadAsync("/noob.glb");
+  const model = gltf.scene;
+
+  // O modelo original olha para -X: gira pra olhar para a câmera (+Z)
+  model.rotation.y = Math.PI / 2;
+  model.updateMatrixWorld(true);
+
+  // Centraliza em X/Z e apoia os pés em y = 0
+  const box = new THREE.Box3().setFromObject(model);
+  const center = box.getCenter(new THREE.Vector3());
+  model.position.set(-center.x, -box.min.y, -center.z);
+  model.updateMatrixWorld(true);
+  const height = box.max.y - box.min.y;
+
+  // Guarda os pixels ORIGINAIS de cada textura (só 1 vez)
+  const sources = new Map();
+  model.traverse((o) => {
+    if (!o.isMesh || !o.material || !o.material.map) return;
+    const map = o.material.map;
+    if (sources.has(map)) return;
+    const img = map.image;
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    sources.set(map, ctx.getImageData(0, 0, c.width, c.height));
+  });
+
+  return { model, height, sources };
+}
+
+// Troca as cores chapadas da textura (o rosto preto é mantido)
+function recolor(source, colors) {
+  const w = source.width, h = source.height;
+  const out = new ImageData(new Uint8ClampedArray(source.data), w, h);
+  const px = out.data;
   const targets = [
     { from: ORIGINAL.skin,  to: hexToRgb(colors.head) },
     { from: ORIGINAL.torso, to: hexToRgb(colors.torso) },
@@ -61,73 +122,156 @@ function recolorTexture(map, colors) {
       }
     }
   }
-  ctx.putImageData(data, 0, 0);
-  map.image = canvas;
-  map.needsUpdate = true;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext("2d").putImageData(out, 0, 0);
+  return canvas;
 }
 
-async function loadNoob(colors) {
-  const gltf = await new GLTFLoader().loadAsync("/noob.glb");
-  const model = gltf.scene;
+// Cria uma cópia do noob com as cores do usuário (não mexe no modelo base)
+function buildAvatar(colors) {
+  const model = base.model.clone(true);
+  const textures = new Map();
+  const disposables = [];
 
   model.traverse((o) => {
-    if (!o.isMesh) return;
-    recolorTexture(o.material.map, colors);
-    o.material = new THREE.MeshLambertMaterial({
-      map: o.material.map,
-      side: THREE.DoubleSide,
-    });
+    if (!o.isMesh || !o.material || !o.material.map) return;
+    const baseMap = o.material.map;
+
+    let tex = textures.get(baseMap);
+    if (!tex) {
+      tex = new THREE.CanvasTexture(recolor(base.sources.get(baseMap), colors));
+      tex.flipY = baseMap.flipY;
+      tex.colorSpace = baseMap.colorSpace;
+      tex.wrapS = baseMap.wrapS;
+      tex.wrapT = baseMap.wrapT;
+      tex.magFilter = baseMap.magFilter;
+      tex.minFilter = baseMap.minFilter;
+      tex.anisotropy = baseMap.anisotropy;
+      tex.needsUpdate = true;
+      textures.set(baseMap, tex);
+      disposables.push(tex);
+    }
+
+    o.material = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide });
+    disposables.push(o.material);
   });
 
-  // O modelo original olha para -X: gira pra olhar para a câmera (+Z)
-  model.rotation.y = Math.PI / 2;
-  model.updateMatrixWorld(true);
-
-  // Centraliza em X/Z e apoia os pés em y = 0
-  const box = new THREE.Box3().setFromObject(model);
-  const center = box.getCenter(new THREE.Vector3());
-  model.position.set(-center.x, -box.min.y, -center.z);
-  return model;
+  return { model, disposables };
 }
 
-window.renderAvatar = async (cfg) => {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-  renderer.setPixelRatio(1);
-  renderer.setSize(cfg.size, cfg.size);
-  renderer.setClearColor(0x000000, 0);
+/* ------------------------------------------------------------------ */
+/*  Enquadramento (calculado a partir da altura do modelo)             */
+/* ------------------------------------------------------------------ */
+function placeCamera(target, dist, azDeg, elDeg) {
+  const az = THREE.MathUtils.degToRad(azDeg);
+  const el = THREE.MathUtils.degToRad(elDeg);
+  camera.position.set(
+    target.x + Math.sin(az) * Math.cos(el) * dist,
+    target.y + Math.sin(el) * dist,
+    target.z + Math.cos(az) * Math.cos(el) * dist
+  );
+  camera.lookAt(target);
+}
 
-  const scene = new THREE.Scene();
-  scene.add(new THREE.AmbientLight(0xffffff, 0.8 * Math.PI));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.9 * Math.PI);
-  sun.position.set(5, 10, 8);
-  scene.add(sun);
+function frame(kind) {
+  const H = base.height;
+  const tanHalf = Math.tan(THREE.MathUtils.degToRad(FOV) / 2);
 
-  scene.add(await loadNoob(cfg.colors));
-
-  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-  if (cfg.kind === "headshot") {
-    camera.position.set(1.5, 4.6, 6.5);
-    camera.lookAt(0, 4.4, 0);
+  if (kind === "headshot") {
+    // Cabeça ocupa quase todo o círculo, levemente de lado (como no print de referência)
+    const headSize = H / 5;
+    const target = new THREE.Vector3(0, H - headSize * 0.5, 0);
+    const dist = (headSize * 1.6) / (2 * tanHalf);
+    placeCamera(target, dist, 20, 5);
   } else {
-    camera.position.set(5, 4.2, 13);
-    camera.lookAt(0, 2.7, 0);
+    // Corpo inteiro em 3/4
+    const target = new THREE.Vector3(0, H * 0.5, 0);
+    const dist = (H * 1.3) / (2 * tanHalf);
+    placeCamera(target, dist, 22, 8);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Render                                                             */
+/* ------------------------------------------------------------------ */
+let lastPx = 0;
+
+function renderNow(cfg) {
+  const size = cfg.size;
+  const ss = size <= 1024 ? 2 : 1; // supersampling pra bordas mais suaves
+  const px = size * ss;
+  if (px !== lastPx) {
+    renderer.setSize(px, px, false);
+    lastPx = px;
   }
 
+  const { model, disposables } = buildAvatar(cfg.colors);
+  scene.add(model);
+  frame(cfg.kind);
   renderer.render(scene, camera);
-  const url = renderer.domElement.toDataURL("image/png");
 
-  scene.traverse((o) => {
-    if (o.geometry) o.geometry.dispose();
-    if (o.material) {
-      if (o.material.map) o.material.map.dispose();
-      o.material.dispose();
-    }
-  });
-  renderer.dispose();
+  let url;
+  if (ss === 1) {
+    url = renderer.domElement.toDataURL("image/png");
+  } else {
+    const out = document.createElement("canvas");
+    out.width = size;
+    out.height = size;
+    const ctx = out.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(renderer.domElement, 0, 0, size, size);
+    url = out.toDataURL("image/png");
+  }
+
+  scene.remove(model);
+  for (const d of disposables) d.dispose(); // geometrias são do modelo base: não descartar
   return url;
-};
+}
 
-window.__ready = true;
+/* ------------------------------------------------------------------ */
+/*  PRÉ-LOAD: baixa o modelo e "aquece" o WebGL antes do 1º pedido     */
+/* ------------------------------------------------------------------ */
+const ready = (async () => {
+  base = await loadBase();
+  // Renders de aquecimento: compilam shaders e sobem geometria pra GPU
+  renderNow({ kind: "headshot", size: 64, colors: DEFAULT_COLORS });
+  renderNow({ kind: "body", size: 64, colors: DEFAULT_COLORS });
+  window.__ready = true;
+})();
+ready.catch((e) => {
+  console.error(e);
+  window.__error = String(e);
+});
+
+/* ------------------------------------------------------------------ */
+/*  API pública                                                        */
+/* ------------------------------------------------------------------ */
+const cache = new Map();
+let queue = Promise.resolve();
+
+window.renderAvatar = (cfg) => {
+  const colors = { ...DEFAULT_COLORS, ...(cfg.colors || {}) };
+  const full = { kind: cfg.kind, size: cfg.size, colors };
+  const key = JSON.stringify([full.kind, full.size, colors]);
+
+  if (cache.has(key)) return Promise.resolve(cache.get(key));
+
+  // Fila: o renderer é compartilhado, então os pedidos rodam um de cada vez
+  const job = queue.then(async () => {
+    await ready;
+    if (cache.has(key)) return cache.get(key);
+    const url = renderNow(full);
+    cache.set(key, url);
+    if (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
+    return url;
+  });
+  queue = job.catch(() => {});
+  return job;
+};
 </script>
 </body>
 </html>
