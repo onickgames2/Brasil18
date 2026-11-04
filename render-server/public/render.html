@@ -4,10 +4,10 @@
   <meta charset="utf-8" />
   <style>html,body{margin:0;background:transparent}</style>
 
-  <!-- PRÉ-LOAD: o navegador começa a baixar tudo em paralelo, antes do script rodar -->
+  <!-- PRÉ-LOAD -->
   <link rel="modulepreload" href="/vendor/three/build/three.module.js" />
   <link rel="modulepreload" href="/vendor/three/examples/jsm/loaders/GLTFLoader.js" />
-  <link rel="preload" href="/noob.glb" as="fetch" crossorigin />
+  <link rel="preload" href="/noob_r6.glb" as="fetch" crossorigin />
 
   <script type="importmap">
     {
@@ -25,15 +25,21 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const FOV = 30;
 const MAX_CACHE = 300;
+const MODEL_URL = "/noob_r6.glb";
 
-// Cores originais da textura do noob (amarelo = cabeça/braços, azul = torso, verde = pernas)
-const ORIGINAL = {
-  skin:  [245, 205, 48],
-  torso: [13, 105, 172],
-  legs:  [164, 189, 71],
+// Tamanho do template do Roblox (shirt/pants): 585x559
+const TW = 585, TH = 559;
+
+// Cor original (amarelo) do rosto/cabeça na textura da cabeça
+const ORIGINAL_SKIN = [245, 205, 48];
+
+// Cores padrão (BodyColors). Se faltar alguma:
+//   leftArm -> head, rightArm -> leftArm, rightLeg -> leftLeg
+const DEFAULT_COLORS = {
+  head: "#f5cd30",
+  torso: "#0d69ac",
+  leftLeg: "#a4bd47",
 };
-
-const DEFAULT_COLORS = { head: "#f5cd30", torso: "#0d69ac", leftLeg: "#a4bd47" };
 
 function hexToRgb(hex) {
   const n = parseInt(hex.slice(1), 16);
@@ -41,14 +47,13 @@ function hexToRgb(hex) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Setup ÚNICO (renderer, cena, luzes, câmera são criados 1 vez só)   */
+/*  Setup ÚNICO                                                        */
 /* ------------------------------------------------------------------ */
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(1);
 renderer.setClearColor(0x000000, 0);
 
 const scene = new THREE.Scene();
-// Luz com mais contraste (sombras mais marcadas, igual ao print de referência)
 scene.add(new THREE.AmbientLight(0xffffff, 0.65 * Math.PI));
 const sun = new THREE.DirectionalLight(0xffffff, 1.0 * Math.PI);
 sun.position.set(4, 8, 6);
@@ -60,16 +65,15 @@ scene.add(fill);
 const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 100);
 
 /* ------------------------------------------------------------------ */
-/*  Modelo base: carregado 1 vez, pixels originais guardados em cache  */
+/*  Modelo base (6 partes: Head, Torso, LeftArm, RightArm, LeftLeg,    */
+/*  RightLeg). UVs das partes do corpo = layout do template do Roblox. */
+/*  O novo modelo já olha para +Z, então NÃO precisa girar.            */
 /* ------------------------------------------------------------------ */
-let base = null; // { model, height, sources: Map<Texture, ImageData> }
+let base = null; // { model, height, headSource: ImageData }
 
 async function loadBase() {
-  const gltf = await new GLTFLoader().loadAsync("/noob.glb");
+  const gltf = await new GLTFLoader().loadAsync(MODEL_URL);
   const model = gltf.scene;
-
-  // O modelo original olha para -X: gira pra olhar para a câmera (+Z)
-  model.rotation.y = Math.PI / 2;
   model.updateMatrixWorld(true);
 
   // Centraliza em X/Z e apoia os pés em y = 0
@@ -79,50 +83,60 @@ async function loadBase() {
   model.updateMatrixWorld(true);
   const height = box.max.y - box.min.y;
 
-  // Guarda os pixels ORIGINAIS de cada textura (só 1 vez)
-  const sources = new Map();
+  // Pixels originais da textura da cabeça (rosto) — guardados 1 vez
+  let headSource = null;
   model.traverse((o) => {
-    if (!o.isMesh || !o.material || !o.material.map) return;
-    const map = o.material.map;
-    if (sources.has(map)) return;
-    const img = map.image;
+    if (headSource || !o.isMesh || partOf(o.name) !== "Head") return;
+    const img = o.material.map.image;
     const c = document.createElement("canvas");
     c.width = img.width;
     c.height = img.height;
     const ctx = c.getContext("2d", { willReadFrequently: true });
     ctx.drawImage(img, 0, 0);
-    sources.set(map, ctx.getImageData(0, 0, c.width, c.height));
+    headSource = ctx.getImageData(0, 0, c.width, c.height);
   });
 
-  return { model, height, sources };
+  return { model, height, headSource };
 }
 
-// Troca as cores chapadas da textura (o rosto preto é mantido)
-function recolor(source, colors) {
+function partOf(name) {
+  const m = /^(Head|Torso|LeftArm|RightArm|LeftLeg|RightLeg)/.exec(name || "");
+  return m ? m[1] : null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Texturas                                                           */
+/* ------------------------------------------------------------------ */
+const imageCache = new Map();
+function loadImage(url) {
+  if (!url) return Promise.resolve(null);
+  if (!imageCache.has(url)) {
+    imageCache.set(url, new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous"; // precisa de CORS se vier de outro domínio
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null); // sem roupa se falhar
+      img.src = url;
+    }));
+  }
+  return imageCache.get(url);
+}
+
+// Cabeça: troca só o amarelo da pele (rosto preto é mantido)
+function recolorHead(source, color) {
   const w = source.width, h = source.height;
   const out = new ImageData(new Uint8ClampedArray(source.data), w, h);
   const px = out.data;
-  const targets = [
-    { from: ORIGINAL.skin,  to: hexToRgb(colors.head) },
-    { from: ORIGINAL.torso, to: hexToRgb(colors.torso) },
-    { from: ORIGINAL.legs,  to: hexToRgb(colors.leftLeg) },
-  ];
+  const to = hexToRgb(color);
   const LIMIT = 40 * 40;
-
   for (let i = 0; i < px.length; i += 4) {
-    for (const t of targets) {
-      const dr = px[i] - t.from[0];
-      const dg = px[i + 1] - t.from[1];
-      const db = px[i + 2] - t.from[2];
-      if (dr * dr + dg * dg + db * db < LIMIT) {
-        px[i] = t.to[0];
-        px[i + 1] = t.to[1];
-        px[i + 2] = t.to[2];
-        break;
-      }
+    const dr = px[i] - ORIGINAL_SKIN[0];
+    const dg = px[i + 1] - ORIGINAL_SKIN[1];
+    const db = px[i + 2] - ORIGINAL_SKIN[2];
+    if (dr * dr + dg * dg + db * db < LIMIT) {
+      px[i] = to[0]; px[i + 1] = to[1]; px[i + 2] = to[2];
     }
   }
-
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
@@ -130,40 +144,66 @@ function recolor(source, colors) {
   return canvas;
 }
 
-// Cria uma cópia do noob com as cores do usuário (não mexe no modelo base)
-function buildAvatar(colors) {
+// Corpo: cor da pele + pants (torso/pernas) + shirt (torso/braços), nessa ordem
+function bodyCanvas(part, color, shirtImg, pantsImg) {
+  const c = document.createElement("canvas");
+  c.width = TW;
+  c.height = TH;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, TW, TH);
+  const usesPants = part === "Torso" || part === "LeftLeg" || part === "RightLeg";
+  const usesShirt = part === "Torso" || part === "LeftArm" || part === "RightArm";
+  if (usesPants && pantsImg) ctx.drawImage(pantsImg, 0, 0, TW, TH);
+  if (usesShirt && shirtImg) ctx.drawImage(shirtImg, 0, 0, TW, TH);
+  return c;
+}
+
+function resolveColors(c) {
+  const head = c.head || DEFAULT_COLORS.head;
+  const torso = c.torso || DEFAULT_COLORS.torso;
+  const leftLeg = c.leftLeg || DEFAULT_COLORS.leftLeg;
+  const leftArm = c.leftArm || head;
+  return {
+    Head: head,
+    Torso: torso,
+    LeftArm: leftArm,
+    RightArm: c.rightArm || leftArm,
+    LeftLeg: leftLeg,
+    RightLeg: c.rightLeg || leftLeg,
+  };
+}
+
+// Cópia do noob com as cores/roupas do usuário (não mexe no modelo base)
+function buildAvatar(colors, shirtImg, pantsImg) {
   const model = base.model.clone(true);
-  const textures = new Map();
   const disposables = [];
 
   model.traverse((o) => {
-    if (!o.isMesh || !o.material || !o.material.map) return;
-    const baseMap = o.material.map;
+    if (!o.isMesh) return;
+    const part = partOf(o.name);
+    if (!part) return;
 
-    let tex = textures.get(baseMap);
-    if (!tex) {
-      tex = new THREE.CanvasTexture(recolor(base.sources.get(baseMap), colors));
-      tex.flipY = baseMap.flipY;
-      tex.colorSpace = baseMap.colorSpace;
-      tex.wrapS = baseMap.wrapS;
-      tex.wrapT = baseMap.wrapT;
-      tex.magFilter = baseMap.magFilter;
-      tex.minFilter = baseMap.minFilter;
-      tex.anisotropy = baseMap.anisotropy;
-      tex.needsUpdate = true;
-      textures.set(baseMap, tex);
-      disposables.push(tex);
-    }
+    const source = part === "Head"
+      ? recolorHead(base.headSource, colors.Head)
+      : bodyCanvas(part, colors[part], shirtImg, pantsImg);
+
+    const tex = new THREE.CanvasTexture(source);
+    tex.flipY = false; // UVs do glTF
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.anisotropy = 4;
+    tex.needsUpdate = true;
 
     o.material = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide });
-    disposables.push(o.material);
+    disposables.push(tex, o.material);
   });
 
   return { model, disposables };
 }
 
 /* ------------------------------------------------------------------ */
-/*  Enquadramento (calculado a partir da altura do modelo)             */
+/*  Enquadramento (igual ao anterior)                                  */
 /* ------------------------------------------------------------------ */
 function placeCamera(target, dist, azDeg, elDeg) {
   const az = THREE.MathUtils.degToRad(azDeg);
@@ -181,18 +221,16 @@ function frame(kind) {
   const tanHalf = Math.tan(THREE.MathUtils.degToRad(FOV) / 2);
 
   if (kind === "headshot") {
-    // Cabeça ocupa quase todo o círculo, quase de frente com leve giro para o lado ESQUERDO
-    // (ângulo negativo = rosto levemente deslocado para a direita, como no print de referência)
     const headSize = H / 5;
     const target = new THREE.Vector3(0, H - headSize * 0.5, 0);
     const dist = (headSize * 1.6) / (2 * tanHalf);
     placeCamera(target, dist, -12, 5);
   } else {
-    // Corpo inteiro em 3/4, girado para o lado OPOSTO ao da foto de perfil
-    // (ângulo positivo = rosto deslocado para a esquerda, vendo o topo dos braços)
+    const AZIMUTE = 36;
+    const ELEVACAO = 18;
     const target = new THREE.Vector3(0, H * 0.5, 0);
-    const dist = (H * 1.3) / (2 * tanHalf);
-    placeCamera(target, dist, 30, 12);
+    const dist = (H * 1.35) / (2 * tanHalf);
+    placeCamera(target, dist, AZIMUTE, ELEVACAO);
   }
 }
 
@@ -203,14 +241,14 @@ let lastPx = 0;
 
 function renderNow(cfg) {
   const size = cfg.size;
-  const ss = size <= 1024 ? 2 : 1; // supersampling pra bordas mais suaves
+  const ss = size <= 1024 ? 2 : 1;
   const px = size * ss;
   if (px !== lastPx) {
     renderer.setSize(px, px, false);
     lastPx = px;
   }
 
-  const { model, disposables } = buildAvatar(cfg.colors);
+  const { model, disposables } = buildAvatar(cfg.colors, cfg.shirtImg, cfg.pantsImg);
   scene.add(model);
   frame(cfg.kind);
   renderer.render(scene, camera);
@@ -230,18 +268,18 @@ function renderNow(cfg) {
   }
 
   scene.remove(model);
-  for (const d of disposables) d.dispose(); // geometrias são do modelo base: não descartar
+  for (const d of disposables) d.dispose();
   return url;
 }
 
 /* ------------------------------------------------------------------ */
-/*  PRÉ-LOAD: baixa o modelo e "aquece" o WebGL antes do 1º pedido     */
+/*  PRÉ-LOAD                                                           */
 /* ------------------------------------------------------------------ */
 const ready = (async () => {
   base = await loadBase();
-  // Renders de aquecimento: compilam shaders e sobem geometria pra GPU
-  renderNow({ kind: "headshot", size: 64, colors: DEFAULT_COLORS });
-  renderNow({ kind: "body", size: 64, colors: DEFAULT_COLORS });
+  const warm = resolveColors(DEFAULT_COLORS);
+  renderNow({ kind: "headshot", size: 64, colors: warm });
+  renderNow({ kind: "body", size: 64, colors: warm });
   window.__ready = true;
 })();
 ready.catch((e) => {
@@ -251,22 +289,28 @@ ready.catch((e) => {
 
 /* ------------------------------------------------------------------ */
 /*  API pública                                                        */
+/*                                                                     */
+/*  renderAvatar({                                                     */
+/*    kind: "headshot" | "body", size: 420,                            */
+/*    colors: { head, torso, leftArm, rightArm, leftLeg, rightLeg },   */
+/*    shirt: "/uploads/shirt.png",   // template 585x559 (opcional)    */
+/*    pants: "/uploads/pants.png",   // template 585x559 (opcional)    */
+/*  })                                                                 */
 /* ------------------------------------------------------------------ */
 const cache = new Map();
 let queue = Promise.resolve();
 
 window.renderAvatar = (cfg) => {
-  const colors = { ...DEFAULT_COLORS, ...(cfg.colors || {}) };
-  const full = { kind: cfg.kind, size: cfg.size, colors };
-  const key = JSON.stringify([full.kind, full.size, colors]);
+  const colors = resolveColors(cfg.colors || {});
+  const key = JSON.stringify([cfg.kind, cfg.size, colors, cfg.shirt || null, cfg.pants || null]);
 
   if (cache.has(key)) return Promise.resolve(cache.get(key));
 
-  // Fila: o renderer é compartilhado, então os pedidos rodam um de cada vez
   const job = queue.then(async () => {
     await ready;
     if (cache.has(key)) return cache.get(key);
-    const url = renderNow(full);
+    const [shirtImg, pantsImg] = await Promise.all([loadImage(cfg.shirt), loadImage(cfg.pants)]);
+    const url = renderNow({ kind: cfg.kind, size: cfg.size, colors, shirtImg, pantsImg });
     cache.set(key, url);
     if (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
     return url;
