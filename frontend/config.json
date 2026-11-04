@@ -63,7 +63,7 @@
         ]
       },
       "baseUrl": "https://brasil17-backend.onrender.com",
-      "apiFormat": "https://api.better16.wtf/{0}{1}"
+      "apiFormat": "https://brasil17-backend.onrender.com/apisite/{0}{1}"
     }
   }
 }
