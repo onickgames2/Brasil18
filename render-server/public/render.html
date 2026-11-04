@@ -4,75 +4,110 @@
   <meta charset="utf-8" />
   <style>html,body{margin:0;background:transparent}</style>
   <script type="importmap">
-    { "imports": { "three": "/vendor/three/build/three.module.js" } }
+    {
+      "imports": {
+        "three": "/vendor/three/build/three.module.js",
+        "three/addons/": "/vendor/three/examples/jsm/"
+      }
+    }
   </script>
 </head>
 <body>
 <script type="module">
 import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-function faceTexture(headColor) {
-  const c = document.createElement("canvas");
-  c.width = c.height = 128;
-  const g = c.getContext("2d");
-  g.fillStyle = headColor;
-  g.fillRect(0, 0, 128, 128);
-  g.fillStyle = "#1b1b1b";
-  g.beginPath(); g.ellipse(44, 52, 7, 11, 0, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.ellipse(84, 52, 7, 11, 0, 0, Math.PI * 2); g.fill();
-  g.strokeStyle = "#1b1b1b";
-  g.lineWidth = 6;
-  g.lineCap = "round";
-  g.beginPath(); g.arc(64, 70, 28, 0.2 * Math.PI, 0.8 * Math.PI); g.stroke();
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+// Cores originais da textura do noob (amarelo = cabeça/braços, azul = torso, verde = pernas)
+const ORIGINAL = {
+  skin:  [245, 205, 48],
+  torso: [13, 105, 172],
+  legs:  [164, 189, 71],
+};
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-function part(w, h, d, color, x, y, z, materials) {
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
-    materials || new THREE.MeshLambertMaterial({ color })
-  );
-  mesh.position.set(x, y, z);
-  return mesh;
+// Troca as cores chapadas da textura pelas cores do usuário (o rosto preto é mantido)
+function recolorTexture(map, colors) {
+  const img = map.image;
+  const w = img.width, h = img.height;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+
+  const data = ctx.getImageData(0, 0, w, h);
+  const px = data.data;
+  const targets = [
+    { from: ORIGINAL.skin,  to: hexToRgb(colors.head) },
+    { from: ORIGINAL.torso, to: hexToRgb(colors.torso) },
+    { from: ORIGINAL.legs,  to: hexToRgb(colors.leftLeg) },
+  ];
+  const LIMIT = 40 * 40;
+
+  for (let i = 0; i < px.length; i += 4) {
+    for (const t of targets) {
+      const dr = px[i] - t.from[0];
+      const dg = px[i + 1] - t.from[1];
+      const db = px[i + 2] - t.from[2];
+      if (dr * dr + dg * dg + db * db < LIMIT) {
+        px[i] = t.to[0];
+        px[i + 1] = t.to[1];
+        px[i + 2] = t.to[2];
+        break;
+      }
+    }
+  }
+  ctx.putImageData(data, 0, 0);
+  map.image = canvas;
+  map.needsUpdate = true;
 }
 
-function buildNoob(colors) {
-  const group = new THREE.Group();
-  const solid = (c) => new THREE.MeshLambertMaterial({ color: c });
+async function loadNoob(colors) {
+  const gltf = await new GLTFLoader().loadAsync("/noob.glb");
+  const model = gltf.scene;
 
-  // Cabeça: material por face; o rosto vai na face +z (índice 4)
-  const headMats = [0, 1, 2, 3, 4, 5].map(() => solid(colors.head));
-  headMats[4] = new THREE.MeshLambertMaterial({ map: faceTexture(colors.head) });
+  model.traverse((o) => {
+    if (!o.isMesh) return;
+    recolorTexture(o.material.map, colors);
+    o.material = new THREE.MeshLambertMaterial({
+      map: o.material.map,
+      side: THREE.DoubleSide,
+    });
+  });
 
-  group.add(part(1.2, 1.1, 1.2, null, 0, 4.55, 0, headMats));      // cabeça
-  group.add(part(2, 2, 1, colors.torso, 0, 3, 0));                  // torso
-  group.add(part(1, 2, 1, colors.leftArm, -1.5, 3, 0));             // braço esquerdo
-  group.add(part(1, 2, 1, colors.rightArm, 1.5, 3, 0));             // braço direito
-  group.add(part(1, 2, 1, colors.leftLeg, -0.5, 1, 0));             // perna esquerda
-  group.add(part(1, 2, 1, colors.rightLeg, 0.5, 1, 0));             // perna direita
-  return group;
+  // O modelo original olha para -X: gira pra olhar para a câmera (+Z)
+  model.rotation.y = Math.PI / 2;
+  model.updateMatrixWorld(true);
+
+  // Centraliza em X/Z e apoia os pés em y = 0
+  const box = new THREE.Box3().setFromObject(model);
+  const center = box.getCenter(new THREE.Vector3());
+  model.position.set(-center.x, -box.min.y, -center.z);
+  return model;
 }
 
-window.renderAvatar = (cfg) => {
+window.renderAvatar = async (cfg) => {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(1);
   renderer.setSize(cfg.size, cfg.size);
   renderer.setClearColor(0x000000, 0);
 
   const scene = new THREE.Scene();
-  scene.add(new THREE.AmbientLight(0xffffff, 0.85));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.8 * Math.PI));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.9 * Math.PI);
   sun.position.set(5, 10, 8);
   scene.add(sun);
 
-  scene.add(buildNoob(cfg.colors));
+  scene.add(await loadNoob(cfg.colors));
 
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
   if (cfg.kind === "headshot") {
-    camera.position.set(1.6, 4.8, 4.8);
-    camera.lookAt(0, 4.5, 0);
+    camera.position.set(1.5, 4.6, 6.5);
+    camera.lookAt(0, 4.4, 0);
   } else {
     camera.position.set(5, 4.2, 13);
     camera.lookAt(0, 2.7, 0);
@@ -83,10 +118,10 @@ window.renderAvatar = (cfg) => {
 
   scene.traverse((o) => {
     if (o.geometry) o.geometry.dispose();
-    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
-      if (m.map) m.map.dispose();
-      m.dispose();
-    });
+    if (o.material) {
+      if (o.material.map) o.material.map.dispose();
+      o.material.dispose();
+    }
   });
   renderer.dispose();
   return url;
