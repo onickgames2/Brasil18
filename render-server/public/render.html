@@ -181,16 +181,18 @@ function frame(kind) {
   const tanHalf = Math.tan(THREE.MathUtils.degToRad(FOV) / 2);
 
   if (kind === "headshot") {
-    // Cabeça ocupa quase todo o círculo, levemente de lado (como no print de referência)
+    // Cabeça ocupa quase todo o círculo, quase de frente com leve giro para o lado ESQUERDO
+    // (ângulo negativo = rosto levemente deslocado para a direita, como no print de referência)
     const headSize = H / 5;
     const target = new THREE.Vector3(0, H - headSize * 0.5, 0);
     const dist = (headSize * 1.6) / (2 * tanHalf);
-    placeCamera(target, dist, 20, 5);
+    placeCamera(target, dist, -12, 5);
   } else {
-    // Corpo inteiro em 3/4
+    // Corpo inteiro em 3/4, girado para o lado OPOSTO ao da foto de perfil
+    // (ângulo positivo = rosto deslocado para a esquerda, vendo o topo dos braços)
     const target = new THREE.Vector3(0, H * 0.5, 0);
     const dist = (H * 1.3) / (2 * tanHalf);
-    placeCamera(target, dist, 22, 8);
+    placeCamera(target, dist, 30, 12);
   }
 }
 
