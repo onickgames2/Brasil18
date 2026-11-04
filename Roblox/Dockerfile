@@ -28,13 +28,14 @@ RUN dotnet publish Roblox/Roblox.Website/Roblox.Website.csproj \
     --no-restore
 
 # ==========================================
-# 3. Container final: frontend + backend
+# 3. Container final: frontend + backend + render
 # ==========================================
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 
-# Node.js + libsodium (o .dll do repo só serve no Windows)
+# Node.js + libsodium + Chromium (render do avatar)
 RUN apt-get update \
  && apt-get install -y curl ca-certificates gnupg libsodium23 \
+    chromium fonts-liberation libgl1-mesa-dri libgles2 \
  && install -d /etc/apt/keyrings \
  && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
     | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
@@ -71,6 +72,18 @@ COPY --from=frontend-build /src/frontend/package*.json ./
 COPY --from=frontend-build /src/frontend/ ./
 
 RUN npm install --omit=dev
+
+# Render server (three.js + Chromium)
+WORKDIR /app/render-server
+
+COPY render-server/package.json ./
+RUN npm install --omit=dev
+COPY render-server/ ./
+
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV RENDER_PORT=7832
+ENV MAX_CONCURRENT=1
 
 # Inicializador
 WORKDIR /app
