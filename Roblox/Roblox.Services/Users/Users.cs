@@ -1303,8 +1303,19 @@ public class UsersService : ServiceBase, IService
         });
         // Render outside transaction to prevent deadlock/unnecessary locks
 #if !DEBUG
-        using var av = ServiceProvider.GetOrCreate<AvatarService>();
-        await av.RedrawAvatar(result.userId, Roblox.Configuration.SignupAvatarAssetIds);
+        var newUserId = result.userId;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var av = ServiceProvider.GetOrCreate<AvatarService>();
+                await av.RedrawAvatar(newUserId, Roblox.Configuration.SignupAvatarAssetIds);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"[UsersService] Falha ao renderizar o avatar do usuário {newUserId}: {e.Message}");
+            }
+        });
 #endif
         return result;
     }
