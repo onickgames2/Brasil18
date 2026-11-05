@@ -44,6 +44,7 @@ function getBrowser() {
       .then((b) => {
         b.on("disconnected", () => {
           browserPromise = null;
+          pagePromise = null;
         });
         return b;
       });
@@ -52,6 +53,38 @@ function getBrowser() {
     });
   }
   return browserPromise;
+}
+
+// ---------- Página de render (uma só, reaproveitada) ----------
+// Assim o GLB, o pré-load e o cache do render.html valem para todas as requisições.
+let pagePromise = null;
+function getPage() {
+  if (!pagePromise) {
+    const promise = (async () => {
+      const browser = await getBrowser();
+      const page = await browser.newPage();
+      page.on("pageerror", (e) => console.error("[page]", e.message));
+      page.on("console", (m) => {
+        if (m.type() === "error") console.error("[page.console]", m.text());
+      });
+      page.on("close", () => {
+        if (pagePromise === promise) pagePromise = null;
+      });
+      await page.goto(`http://127.0.0.1:${PORT}/render.html`, { waitUntil: "load" });
+      await page.waitForFunction("window.__ready === true || !!window.__error", { timeout: 30000 });
+      const err = await page.evaluate(() => window.__error || null);
+      if (err) {
+        await page.close().catch(() => {});
+        throw new Error("render.html não carregou: " + err);
+      }
+      return page;
+    })();
+    pagePromise = promise;
+    promise.catch(() => {
+      if (pagePromise === promise) pagePromise = null;
+    });
+  }
+  return pagePromise;
 }
 
 // ---------- Fila simples pra limitar renders simultâneos ----------
@@ -85,22 +118,20 @@ async function getAvatarColors(userId, override) {
   return colors;
 }
 
+// Só aceita URLs http(s) para shirt/pants (templates 585x559, precisam de CORS)
+const httpUrl = (v) => (typeof v === "string" && /^https?:\/\//i.test(v) ? v : null);
+
 // ---------- Render ----------
 async function renderScene(config) {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
+  const page = await getPage();
   try {
-    page.on("pageerror", (e) => console.error("[page]", e.message));
-    page.on("console", (m) => {
-      if (m.type() === "error") console.error("[page.console]", m.text());
-    });
-    await page.setViewport({ width: config.size, height: config.size });
-    await page.goto(`http://127.0.0.1:${PORT}/render.html`, { waitUntil: "load" });
-    await page.waitForFunction("window.__ready === true", { timeout: 20000 });
     const dataUrl = await page.evaluate((c) => window.renderAvatar(c), config);
     return dataUrl.replace(/^data:image\/png;base64,/, "");
-  } finally {
+  } catch (e) {
+    // Se a página travou ou fechou, descarta pra próxima requisição abrir uma nova
+    pagePromise = null;
     await page.close().catch(() => {});
+    throw e;
   }
 }
 
@@ -116,7 +147,11 @@ function makeHandler(kind, defaultSize) {
       }
       const colors = await getAvatarColors(userId, req.body?.colors);
       const size = clamp(Number(req.body?.size) || defaultSize, 64, 1024);
-      const data = await withSlot(() => renderScene({ kind, size, colors }));
+      const shirt = httpUrl(req.body?.shirt);
+      const pants = httpUrl(req.body?.pants);
+      const data = await withSlot(() =>
+        renderScene({ kind: kind === "headshot" ? "headshot" : "body", size, colors, shirt, pants })
+      );
       console.log(`[render] ${kind} user=${userId} ${Date.now() - t0}ms`);
       res.json({ success: true, data }); // data = PNG em base64
     } catch (e) {
@@ -142,5 +177,8 @@ app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`[render-server] ouvindo na porta ${PORT}`);
-  getBrowser().catch((e) => console.error("[render-server] erro ao abrir Chromium:", e));
+  // Já abre o Chromium e a página, pra primeira requisição não esperar
+  getPage()
+    .then(() => console.log("[render-server] página de render pronta"))
+    .catch((e) => console.error("[render-server] erro ao preparar a página:", e));
 });
