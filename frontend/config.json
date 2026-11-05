@@ -63,7 +63,7 @@
         ]
       },
       "baseUrl": "https://brasil17-backend.onrender.com",
-      "apiFormat": "http://localhost:5000/apisite/{0}{1}"
+      "apiFormat": "https://brasil17-backend.onrender.com/apisite/{0}{1}"
     }
   }
 }
