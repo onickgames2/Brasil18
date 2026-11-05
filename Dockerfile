@@ -5,6 +5,11 @@ RUN npm install
 COPY admin/ .
 RUN npm run build
 
+FROM golang:1.22 AS validator-build
+WORKDIR /validator
+COPY AssetValidationServiceV2/ .
+RUN CGO_ENABLED=0 go build -o /validator-bin .
+
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY . .
@@ -19,4 +24,6 @@ COPY --from=build /app/publish .
 # Painel admin: com AdminBundleDirectory vazio o backend lê /index.html e /build/bundle.(js|css)
 COPY --from=admin-build /admin/public/index.html /index.html
 COPY --from=admin-build /admin/public/build /build
-CMD ["sh", "-c", "ASPNETCORE_URLS=http://0.0.0.0:${PORT:-10000} dotnet Roblox.Website.dll"]
+# Serviço de validação de assets (Go), roda no mesmo container na porta 4300
+COPY --from=validator-build /validator-bin /usr/local/bin/validator
+CMD ["sh", "-c", "validator & ASPNETCORE_URLS=http://0.0.0.0:${PORT:-10000} exec dotnet Roblox.Website.dll"]
