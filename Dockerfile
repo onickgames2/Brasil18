@@ -16,5 +16,7 @@ WORKDIR /app
 # o libsodium.dll do repo é de Windows; no Linux precisa da lib instalada
 RUN apt-get update && apt-get install -y libsodium23 && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
-COPY --from=admin-build /admin/public /app/admin-public
+# Painel admin: com AdminBundleDirectory vazio o backend lê /index.html e /build/bundle.(js|css)
+COPY --from=admin-build /admin/public/index.html /index.html
+COPY --from=admin-build /admin/public/build /build
 CMD ["sh", "-c", "ASPNETCORE_URLS=http://0.0.0.0:${PORT:-10000} dotnet Roblox.Website.dll"]
