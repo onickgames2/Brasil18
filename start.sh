@@ -8,11 +8,31 @@ PUBLIC_PORT="${PORT:-10000}"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 # Porta interna do render server (o RenderingHandler usa localhost:7832 por padrão)
 RENDER_PORT="${RENDER_PORT:-7832}"
+# Porta interna do serviço de validação (AssetValidation__BaseUrl = http://localhost:4300)
+VALIDATION_PORT="${VALIDATION_PORT:-4300}"
+VALIDATION_BIN="/app/asset-validation/asset-validation"
 
 FRONTEND_PID=""
 RENDER_PID=""
+VALIDATION_PID=""
 
-# Backend (ASP.NET) primeiro, na porta pública
+# Serviço de validação de assets (Go), só se o programa existir
+start_validation() {
+    if [ ! -x "$VALIDATION_BIN" ]; then
+        return 1
+    fi
+    cd /app/asset-validation || return 1
+    PORT="$VALIDATION_PORT" "$VALIDATION_BIN" &
+    VALIDATION_PID=$!
+    cd /app || return 1
+}
+if start_validation; then
+    echo "✅ Serviço de validação iniciado na porta $VALIDATION_PORT."
+else
+    echo "⚠️ Serviço de validação não encontrado em $VALIDATION_BIN, seguindo sem ele."
+fi
+
+# Backend (ASP.NET) na porta pública
 cd /app || exit 1
 unset ASPNETCORE_HTTP_PORTS
 ASPNETCORE_URLS="http://0.0.0.0:$PUBLIC_PORT" dotnet Roblox.Website.dll &
@@ -51,10 +71,11 @@ start_render() {
 start_render
 
 terminate() {
-    kill "$FRONTEND_PID" "$BACKEND_PID" "$RENDER_PID" 2>/dev/null || true
+    kill "$FRONTEND_PID" "$BACKEND_PID" "$RENDER_PID" $VALIDATION_PID 2>/dev/null || true
     wait "$FRONTEND_PID" 2>/dev/null || true
     wait "$BACKEND_PID" 2>/dev/null || true
     wait "$RENDER_PID" 2>/dev/null || true
+    [ -n "$VALIDATION_PID" ] && wait "$VALIDATION_PID" 2>/dev/null || true
 }
 
 trap terminate TERM INT
@@ -67,6 +88,11 @@ do
     if ! kill -0 "$RENDER_PID" 2>/dev/null; then
         echo "⚠️ Render server caiu, reiniciando..."
         start_render
+    fi
+    # Mesma coisa para o serviço de validação, se ele existir
+    if [ -n "$VALIDATION_PID" ] && ! kill -0 "$VALIDATION_PID" 2>/dev/null; then
+        echo "⚠️ Serviço de validação caiu, reiniciando..."
+        start_validation
     fi
     sleep 2
 done
