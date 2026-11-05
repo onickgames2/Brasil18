@@ -908,6 +908,15 @@ public class AvatarService : ServiceBase, IService {
         var headshotResult = result[0];
         var thumbnailResult = result[1];
 
+        // Se o render server falhou, não grava URL de arquivo que não existe:
+        // deixa NULL para o job tentar de novo.
+        if (headshotResult == "FAILURE" || thumbnailResult == "FAILURE")
+        {
+            Writer.Info(LogGroup.AvatarService, "Render falhou para o usuário {0}; miniaturas ficam pendentes", userId);
+            await UpdateUserAvatarImages(userId, null, null, null);
+            return;
+        }
+
         try
         {
             string headshotFileName = $"{avatarHash}_headshot.png";
@@ -939,7 +948,7 @@ public class AvatarService : ServiceBase, IService {
         catch (Exception ex)
         {
             Writer.Info(LogGroup.AvatarService, "Failed to save headshot or thumbnail for user {0}: {1}", userId, ex.Message);
-            await UpdateUserAvatarImages(userId, headshotUrl, thumbnailUrl, null);
+            await UpdateUserAvatarImages(userId, null, null, null);
             return;
         }
 
