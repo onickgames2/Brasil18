@@ -28,7 +28,17 @@ RUN dotnet publish Roblox/Roblox.Website/Roblox.Website.csproj \
     --no-restore
 
 # ==========================================
-# 3. Container final: frontend + backend + render
+# 3. Compilar o serviço de validação de assets (Go)
+# ==========================================
+FROM golang:1.22 AS validator-build
+
+WORKDIR /validator
+
+COPY AssetValidationServiceV2/ .
+RUN CGO_ENABLED=0 go build -o /validator-bin .
+
+# ==========================================
+# 4. Container final: frontend + backend + render + validação
 # ==========================================
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 
@@ -85,14 +95,18 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV RENDER_PORT=7832
 ENV MAX_CONCURRENT=1
 
+# Serviço de validação de assets (Go): o start.sh sobe na porta 4300
+WORKDIR /app/asset-validation
+COPY --from=validator-build /validator-bin ./asset-validation
+
 # Inicializador
 WORKDIR /app
 
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
-# O Render define PORT (10000): quem usa é o Next.js.
-# O backend usa uma porta interna (BACKEND_PORT), definida no start.sh.
+# O Render define PORT (10000): quem usa é o BACKEND (ele faz proxy pro Next).
+# O Next.js usa FRONTEND_PORT e o backend responde na porta pública.
 ENV BACKEND_PORT=5000
 EXPOSE 10000
 
