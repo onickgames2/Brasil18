@@ -1,3 +1,10 @@
+FROM node:18 AS admin-build
+WORKDIR /admin
+COPY admin/package*.json ./
+RUN npm install
+COPY admin/ .
+RUN npm run build
+
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY . .
@@ -9,4 +16,5 @@ WORKDIR /app
 # o libsodium.dll do repo é de Windows; no Linux precisa da lib instalada
 RUN apt-get update && apt-get install -y libsodium23 && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
+COPY --from=admin-build /admin/public /app/admin-public
 CMD ["sh", "-c", "ASPNETCORE_URLS=http://0.0.0.0:${PORT:-10000} dotnet Roblox.Website.dll"]
