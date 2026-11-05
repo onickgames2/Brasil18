@@ -6,6 +6,7 @@ using Roblox.Models.Assets;
 using Roblox.Models.Thumbnails;
 using Roblox.Services.Exceptions;
 using Type = Roblox.Models.Assets.Type;
+using System.Collections.Concurrent;
 
 namespace Roblox.Services;
 
@@ -64,6 +65,40 @@ public class ThumbnailsService : ServiceBase, IService
         response.AddRange(outOfDate);
         response.AddRange(query);
         return response;
+    }
+
+        private static readonly ConcurrentDictionary<long, DateTime> LastRedrawTrigger = new();
+        private static readonly SemaphoreSlim RedrawSlots = new(2);
+
+    private static void TriggerRedrawForPending(IEnumerable<ThumbnailEntry> entries)
+    {
+        foreach (var entry in entries)
+        {
+            if (entry.imageUrl != null) continue;
+            var userId = entry.targetId;
+            var now = DateTime.UtcNow;
+            var last = LastRedrawTrigger.GetOrAdd(userId, DateTime.MinValue);
+            if (now - last < TimeSpan.FromSeconds(90)) continue;
+            if (!LastRedrawTrigger.TryUpdate(userId, now, last)) continue;
+
+            _ = Task.Run(async () =>
+            {
+                await RedrawSlots.WaitAsync();
+                try
+                {
+                    using var av = ServiceProvider.GetOrCreate<AvatarService>();
+                    await av.RedrawAvatar(userId);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"[ThumbnailsService] Redraw sob demanda falhou para {userId}: {e.Message}");
+                }
+                finally
+                {
+                    RedrawSlots.Release();
+                }
+            });
+        }
     }
 
     public async Task<IEnumerable<ThumbnailEntry>> GetUserHeadshots(IEnumerable<long> userIds)
