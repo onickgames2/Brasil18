@@ -1,5 +1,7 @@
 import express from "express";
 import puppeteer from "puppeteer-core";
+import pg from "pg";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -22,6 +24,79 @@ const app = express();
 app.use(express.json({ limit: "1mb" }));
 app.use("/vendor/three", express.static(path.join(__dirname, "node_modules/three")));
 app.use("/", express.static(path.join(__dirname, "public")));
+
+// ---------- Tabela de cores (brickColorId -> hex) ----------
+// Procura o avatar-colors.json em /app/JsonData (do backend) ou ao lado deste arquivo.
+const COLORS_PATHS = [
+  process.env.AVATAR_COLORS_PATH,
+  path.join(__dirname, "..", "JsonData", "avatar-colors.json"),
+  path.join(__dirname, "avatar-colors.json"),
+].filter(Boolean);
+
+const brickHex = new Map();
+for (const p of COLORS_PATHS) {
+  try {
+    const list = JSON.parse(fs.readFileSync(p, "utf8"));
+    for (const c of list) brickHex.set(Number(c.brickColorId), String(c.hexColor).toUpperCase());
+    console.log(`[render-server] ${brickHex.size} cores carregadas de ${p}`);
+    break;
+  } catch {
+    // tenta o próximo caminho
+  }
+}
+if (brickHex.size === 0) {
+  console.warn("[render-server] avatar-colors.json não encontrado: todos os avatares usarão o noob padrão");
+}
+
+// ---------- Banco (só leitura das cores do avatar) ----------
+// Defina RENDER_DATABASE_URL no Render, no formato:
+//   postgresql://postgres.<ref>:<senha>@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+// Sem ela, o servidor usa o noob padrão (ou as cores que vierem no corpo da requisição).
+const DB_URL = process.env.RENDER_DATABASE_URL;
+const pool = DB_URL
+  ? new pg.Pool({
+      connectionString: DB_URL,
+      max: 2,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      ssl: { rejectUnauthorized: false },
+    })
+  : null;
+if (pool) pool.on("error", (e) => console.error("[db]", e.message));
+else console.warn("[render-server] RENDER_DATABASE_URL não definida: sem cores reais dos usuários");
+
+// Colunas da tabela user_avatar com o brickColorId de cada parte.
+// Se o nome de alguma coluna for diferente no seu banco, é só mudar aqui.
+const COLOR_COLUMNS = {
+  head: "head_color_id",
+  torso: "torso_color_id",
+  leftArm: "left_arm_color_id",
+  rightArm: "right_arm_color_id",
+  leftLeg: "left_leg_color_id",
+  rightLeg: "right_leg_color_id",
+};
+
+let lastDbWarn = 0;
+async function fetchUserColors(userId) {
+  if (!pool) return {};
+  try {
+    const cols = Object.values(COLOR_COLUMNS).join(", ");
+    const r = await pool.query(`SELECT ${cols} FROM user_avatar WHERE user_id = $1 LIMIT 1`, [userId]);
+    if (r.rows.length === 0) return {};
+    const out = {};
+    for (const [key, col] of Object.entries(COLOR_COLUMNS)) {
+      const hex = brickHex.get(Number(r.rows[0][col]));
+      if (hex) out[key] = hex;
+    }
+    return out;
+  } catch (e) {
+    if (Date.now() - lastDbWarn > 60000) {
+      lastDbWarn = Date.now();
+      console.error("[render-server] não consegui ler as cores do banco (usando o noob padrão):", e.message);
+    }
+    return {};
+  }
+}
 
 // ---------- Browser (uma instância só, reaproveitada) ----------
 let browserPromise = null;
@@ -103,11 +178,10 @@ async function withSlot(fn) {
 }
 
 // ---------- Cores do avatar ----------
-// TODO: quando você me passar as colunas da tabela user_avatar, buscar aqui
-// as cores reais do usuário. Por enquanto usa o noob padrão ou as cores do body.
+// Ordem de prioridade: cores enviadas no corpo da requisição > banco > noob padrão
 const HEX = /^#[0-9a-fA-F]{6}$/;
 async function getAvatarColors(userId, override) {
-  const colors = { ...DEFAULT_COLORS };
+  const colors = { ...DEFAULT_COLORS, ...(await fetchUserColors(userId)) };
   if (override && typeof override === "object") {
     for (const key of Object.keys(colors)) {
       if (typeof override[key] === "string" && HEX.test(override[key])) {
