@@ -643,8 +643,39 @@ public class GroupsControllerV1 : ControllerBase
         FeatureFlags.FeatureCheck(FeatureFlag.UploadContentEnabled);
         try
         {
-            return await services.groups.CreateGroup(request.name, services.filter.FilterText(request.description), request.icon.OpenReadStream(),
+            var created = await services.groups.CreateGroup(request.name, services.filter.FilterText(request.description), request.icon.OpenReadStream(),
                 safeUserSession.userId);
+
+            // Garante que a resposta sempre tenha "id" e "groupId", seja qual for o formato devolvido
+            var el = System.Text.Json.JsonSerializer.SerializeToElement((object)created);
+            var response = new Dictionary<string, object?>();
+            long? newId = null;
+
+            if (el.ValueKind == System.Text.Json.JsonValueKind.Number)
+            {
+                newId = el.GetInt64();
+            }
+            else if (el.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var prop in el.EnumerateObject())
+                {
+                    response[prop.Name] = prop.Value.Clone();
+                    if (newId == null
+                        && prop.Value.ValueKind == System.Text.Json.JsonValueKind.Number
+                        && (prop.Name.Equals("id", StringComparison.OrdinalIgnoreCase)
+                            || prop.Name.Equals("groupId", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        newId = prop.Value.GetInt64();
+                    }
+                }
+            }
+
+            if (newId == null)
+                throw new RobloxException(500, 0, "Group was created but its id could not be determined");
+
+            response["id"] = newId.Value;
+            response["groupId"] = newId.Value;
+            return response;
         }
         catch (ArgumentException e)
         {
