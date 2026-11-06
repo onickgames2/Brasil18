@@ -12,7 +12,20 @@ COPY frontend/ ./
 RUN npm run build
 
 # ==========================================
-# 2. Compilar o backend
+# 2. Compilar o painel admin (Svelte)
+# ==========================================
+FROM node:18 AS admin-build
+
+WORKDIR /admin
+
+COPY admin/package*.json ./
+RUN npm install
+
+COPY admin/ .
+RUN npm run build
+
+# ==========================================
+# 3. Compilar o backend
 # ==========================================
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS backend-build
 
@@ -28,7 +41,7 @@ RUN dotnet publish Roblox/Roblox.Website/Roblox.Website.csproj \
     --no-restore
 
 # ==========================================
-# 3. Compilar o serviço de validação de assets (Go)
+# 4. Compilar o serviço de validação de assets (Go)
 # ==========================================
 FROM golang:1.22 AS validator-build
 
@@ -38,7 +51,7 @@ COPY AssetValidationServiceV2/ .
 RUN CGO_ENABLED=0 go build -o /validator-bin .
 
 # ==========================================
-# 4. Container final: frontend + backend + render + validação
+# 5. Container final: frontend + backend + render + validação + admin
 # ==========================================
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 
@@ -74,6 +87,10 @@ RUN ls -la /app/public/css/roblox/
 # Dados JSON
 COPY --from=backend-build /src/JsonData/ /app/JsonData/
 RUN test -f /app/JsonData/avatar-colors.json
+
+# Painel admin: com AdminBundleDirectory vazio o backend lê /index.html e /build/bundle.(js|css)
+COPY --from=admin-build /admin/public/index.html /index.html
+COPY --from=admin-build /admin/public/build /build
 
 # Frontend compilado
 WORKDIR /app/Frontend
