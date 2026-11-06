@@ -16,6 +16,7 @@ const AvatarPage = () => {
             <script src="/js/3d/three-r137/OBJLoaderr.js" />
             <script src="/js/3d/three-r137/RobloxOrbitControls.js" />
             <script src="/js/3d/tween.js" />
+            <script src="/js/3d/site-origin.js" />
         </Head>
         <div className="container flex flex-column ssp">
             <AdBanner context="MyCharacterPage"/>
