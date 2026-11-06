@@ -211,8 +211,8 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 // Ensure thumbnail directories exist and use absolute paths.
-Roblox.Configuration.ThumbnailsDirectory = "/app/public/images/thumbnails";
-Roblox.Configuration.GroupIconsDirectory = "/app/public/images/groups";
+Roblox.Configuration.ThumbnailsDirectory = "/app/public/images/thumbnails/";
+Roblox.Configuration.GroupIconsDirectory = "/app/public/images/groups/";
 
 Directory.CreateDirectory(Roblox.Configuration.ThumbnailsDirectory);
 Directory.CreateDirectory(Roblox.Configuration.GroupIconsDirectory);
