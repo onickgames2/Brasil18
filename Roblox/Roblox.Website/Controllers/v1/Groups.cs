@@ -440,8 +440,8 @@ public class GroupsControllerV1 : ControllerBase
         var result = (await services.groups.GetAuditLog(groupId, offset, limit)).AsList();
         return new()
         {
-            nextPageCursor = result.Count >= limit ? (limit + cursor).ToString() : null,
-            previousPageCursor = offset >= limit ? (offset-limit).ToString() : null,
+            nextPageCursor = result.Count >= limit ? (limit + offset).ToString() : null,
+            previousPageCursor = offset >= limit ? (offset - limit).ToString() : null,
             data = result,
         };
     }
