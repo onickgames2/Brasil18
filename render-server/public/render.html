@@ -318,6 +318,39 @@ window.renderAvatar = (cfg) => {
   queue = job.catch(() => {});
   return job;
 };
+
+/* ------------------------------------------------------------------ */
+/*  Texturas para a miniatura 3D (OBJ + MTL)                           */
+/*                                                                     */
+/*  buildTextures3D({ colors }) devolve um PNG (base64, sem prefixo)   */
+/*  por parte: Head (rosto), Torso, LeftArm, RightArm, LeftLeg,        */
+/*  RightLeg. As partes do corpo são cor chapada, então basta 8x8.     */
+/* ------------------------------------------------------------------ */
+const pngBase64 = (canvas) =>
+  canvas.toDataURL("image/png").replace(/^data:image\/png;base64,/, "");
+
+function flatPng(hex) {
+  const c = document.createElement("canvas");
+  c.width = 8;
+  c.height = 8;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = hex;
+  ctx.fillRect(0, 0, 8, 8);
+  return pngBase64(c);
+}
+
+window.buildTextures3D = async (cfg) => {
+  await ready;
+  const colors = resolveColors((cfg && cfg.colors) || {});
+  return {
+    Head: pngBase64(recolorHead(base.headSource, colors.Head)),
+    Torso: flatPng(colors.Torso),
+    LeftArm: flatPng(colors.LeftArm),
+    RightArm: flatPng(colors.RightArm),
+    LeftLeg: flatPng(colors.LeftLeg),
+    RightLeg: flatPng(colors.RightLeg),
+  };
+};
 </script>
 </body>
 </html>
