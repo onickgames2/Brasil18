@@ -4,6 +4,7 @@ import pg from "pg";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { buildThumbnail3D } from "./thumb3d.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.RENDER_PORT || 7832);
@@ -209,6 +210,18 @@ async function renderScene(config) {
   }
 }
 
+// Texturas (PNG base64) de cada parte do corpo para a miniatura 3D
+async function renderTextures3D(colors) {
+  const page = await getPage();
+  try {
+    return await page.evaluate((c) => window.buildTextures3D({ colors: c }), colors);
+  } catch (e) {
+    pagePromise = null;
+    await page.close().catch(() => {});
+    throw e;
+  }
+}
+
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 
 function makeHandler(kind, defaultSize) {
@@ -239,10 +252,26 @@ function makeHandler(kind, defaultSize) {
 app.post("/player/thumbnail", makeHandler("avatar", 420));
 app.post("/player/headshot", makeHandler("headshot", 150));
 
+// Miniatura 3D: devolve o JSON { camera, AABB, files } que o RedrawAvatar do backend espera
+app.post("/player/thumbnail-3d", async (req, res) => {
+  const t0 = Date.now();
+  try {
+    const userId = Number(req.body?.userId);
+    if (!Number.isFinite(userId)) {
+      return res.status(400).json({ success: false, message: "userId inválido" });
+    }
+    const colors = await getAvatarColors(userId, req.body?.colors);
+    const textures = await withSlot(() => renderTextures3D(colors));
+    const data = buildThumbnail3D(textures); // texto JSON
+    console.log(`[render] avatar-3d user=${userId} ${Date.now() - t0}ms`);
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error("[render] avatar-3d falhou:", e);
+    res.status(500).json({ success: false, message: String(e.message || e) });
+  }
+});
+
 // Ainda não implementadas (próximos passos)
-app.post("/player/thumbnail-3d", (req, res) =>
-  res.status(501).json({ success: false, message: "thumbnail-3d ainda não implementado" })
-);
 app.post("*", (req, res) =>
   res.status(501).json({ success: false, message: `rota ${req.path} ainda não implementada` })
 );
