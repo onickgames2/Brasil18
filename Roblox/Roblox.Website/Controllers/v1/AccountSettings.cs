@@ -14,7 +14,7 @@ public class AccountSettingsControllerV1 : ControllerBase
     {
         return new
         {
-            emailAddress = "marine@silrev.biz",
+            emailAddress = "Brasil17@onrender.com",
             verified = true,
         };
     }
