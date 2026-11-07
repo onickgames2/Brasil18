@@ -84,6 +84,16 @@ RUN if [ -d /app/public/css/Roblox ]; then \
 RUN test -d /app/public/css/roblox
 RUN ls -la /app/public/css/roblox/
 
+# Pastas de arquivos que o backend grava (o código cola pasta + nome do arquivo,
+# por isso os caminhos terminam com "/"). Sem elas o upload dá erro 500.
+RUN mkdir -p /app/storage/assets \
+             /app/public/images/thumbnails \
+             /app/public/images/groups
+
+# Valores padrão (as variáveis do painel do Render, se existirem, têm prioridade)
+ENV Directories__Storage=/app/storage/
+ENV Directories__Asset=/app/storage/assets/
+
 # Dados JSON
 COPY --from=backend-build /src/JsonData/ /app/JsonData/
 RUN test -f /app/JsonData/avatar-colors.json
