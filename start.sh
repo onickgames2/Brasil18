@@ -11,10 +11,13 @@ RENDER_PORT="${RENDER_PORT:-7832}"
 # Porta interna do serviço de validação (AssetValidation__BaseUrl = http://localhost:4300)
 VALIDATION_PORT="${VALIDATION_PORT:-4300}"
 VALIDATION_BIN="/app/asset-validation/asset-validation"
+# Backup dos uploads no banco (imagens, assets): restaura ao subir e copia a cada ciclo
+SYNC_SCRIPT="/app/render-server/storage-sync.mjs"
 
 FRONTEND_PID=""
 RENDER_PID=""
 VALIDATION_PID=""
+SYNC_PID=""
 
 # Serviço de validação de assets (Go), só se o programa existir
 start_validation() {
@@ -30,6 +33,14 @@ if start_validation; then
     echo "✅ Serviço de validação iniciado na porta $VALIDATION_PORT."
 else
     echo "⚠️ Serviço de validação não encontrado em $VALIDATION_BIN, seguindo sem ele."
+fi
+
+# Restaura do banco os arquivos enviados antes (o disco é apagado a cada deploy).
+# Roda ANTES do backend para os arquivos já estarem no lugar quando o site abrir.
+if [ -f "$SYNC_SCRIPT" ]; then
+    echo "📦 Restaurando uploads salvos no banco..."
+    (cd /app/render-server && timeout 180 node storage-sync.mjs restore) \
+        || echo "⚠️ Restauração não concluída, seguindo sem ela."
 fi
 
 # Backend (ASP.NET) na porta pública
@@ -70,12 +81,28 @@ start_render() {
 }
 start_render
 
+# Cópia contínua dos uploads para o banco, só se o script existir
+start_sync() {
+    if [ ! -f "$SYNC_SCRIPT" ]; then
+        return 1
+    fi
+    cd /app/render-server || return 1
+    node storage-sync.mjs watch &
+    SYNC_PID=$!
+    cd /app || return 1
+}
+if start_sync; then
+    echo "✅ Backup dos uploads no banco ativo."
+fi
+
 terminate() {
-    kill "$FRONTEND_PID" "$BACKEND_PID" "$RENDER_PID" $VALIDATION_PID 2>/dev/null || true
+    kill "$FRONTEND_PID" "$BACKEND_PID" "$RENDER_PID" $VALIDATION_PID $SYNC_PID 2>/dev/null || true
     wait "$FRONTEND_PID" 2>/dev/null || true
     wait "$BACKEND_PID" 2>/dev/null || true
     wait "$RENDER_PID" 2>/dev/null || true
     [ -n "$VALIDATION_PID" ] && wait "$VALIDATION_PID" 2>/dev/null || true
+    # espera a cópia final dos uploads terminar
+    [ -n "$SYNC_PID" ] && wait "$SYNC_PID" 2>/dev/null || true
 }
 
 trap terminate TERM INT
@@ -93,6 +120,11 @@ do
     if [ -n "$VALIDATION_PID" ] && ! kill -0 "$VALIDATION_PID" 2>/dev/null; then
         echo "⚠️ Serviço de validação caiu, reiniciando..."
         start_validation
+    fi
+    # E para o backup dos uploads
+    if [ -n "$SYNC_PID" ] && ! kill -0 "$SYNC_PID" 2>/dev/null; then
+        echo "⚠️ Backup dos uploads caiu, reiniciando..."
+        start_sync
     fi
     sleep 2
 done
