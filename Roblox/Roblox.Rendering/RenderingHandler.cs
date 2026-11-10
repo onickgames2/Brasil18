@@ -14,16 +14,7 @@ namespace Roblox.Rendering
     {
         private static Random RandomComponent = new Random();
         private static HttpClient client = new HttpClient();
-
-        // Se true, Avatar e Headshot vêm da API oficial da Roblox.
-        // Para desligar, defina a variável de ambiente USE_ROBLOX_API=false
-        private static bool UseRobloxApi =>
-            (Environment.GetEnvironmentVariable("USE_ROBLOX_API") ?? "true").ToLower() != "false";
-
-        // Opcional: defina isso para mapear o ID do usuário do seu site para um ID real do Roblox.
-        // Exemplo: RenderingHandler.RobloxIdResolver = async siteId => await MinhaConsultaNoBanco(siteId);
-        public static Func<long, Task<long?>>? RobloxIdResolver { get; set; }
-
+        // TODO: REWRITE RENDERING HANDLER
         private enum RenderType
         {
             Avatar = 0,
@@ -44,206 +35,23 @@ namespace Roblox.Rendering
             Animation,
             Avatar3D
         }
-
         private class RenderResponse
         {
             public bool success { get; set; }
             public string? message { get; set; }
             public string? data { get; set; }
         }
-
         public static void Configure()
         {
-        }
 
+        }
         public static Dictionary<long, string> allowedPlaceForRender = new Dictionary<long, string>();
-
-        // ---------------------------------------------------------------
-        // API DA ROBLOX (avatar e headshot)
-        // ---------------------------------------------------------------
-
-        private static async Task<long> ResolveRobloxUserId(long siteUserId)
-        {
-            if (RobloxIdResolver != null)
-            {
-                try
-                {
-                    var mapped = await RobloxIdResolver(siteUserId);
-                    if (mapped.HasValue && mapped.Value > 0)
-                        return mapped.Value;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[RenderingHandler] Erro no RobloxIdResolver: {ex.Message}");
-                }
-            }
-
-            // Fallback: ID padrão (variável ROBLOX_DEFAULT_USER_ID) ou 1
-            var envId = Environment.GetEnvironmentVariable("ROBLOX_DEFAULT_USER_ID");
-            if (long.TryParse(envId, out var parsed) && parsed > 0)
-                return parsed;
-
-            return 1;
-        }
-
-        // Retorna a imagem PNG em base64, ou "FAILURE"
-        private static async Task<string> GetRobloxApiThumbnail(long siteUserId, bool headshot)
-        {
-            var sw = Stopwatch.StartNew();
-            long robloxId = await ResolveRobloxUserId(siteUserId);
-            string tipo = headshot ? "avatar-headshot" : "avatar";
-            string apiUrl = $"https://thumbnails.roblox.com/v1/users/{tipo}?userIds={robloxId}&size=420x420&format=Png&isCircular=false";
-
-            for (int tentativa = 0; tentativa < 5; tentativa++)
-            {
-                try
-                {
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                    string json = await client.GetStringAsync(apiUrl, cts.Token);
-                    using var doc = JsonDocument.Parse(json);
-                    var item = doc.RootElement.GetProperty("data")[0];
-                    string? state = item.GetProperty("state").GetString();
-
-                    if (state == "Completed")
-                    {
-                        string? imageUrl = item.GetProperty("imageUrl").GetString();
-                        if (!string.IsNullOrEmpty(imageUrl))
-                        {
-                            byte[] bytes = await client.GetByteArrayAsync(imageUrl, cts.Token);
-                            sw.Stop();
-                            Console.WriteLine($"[RenderingHandler] Roblox API ({tipo}) user {siteUserId} -> robloxId {robloxId} OK em {sw.ElapsedMilliseconds}ms");
-                            return Convert.ToBase64String(bytes);
-                        }
-                    }
-                    else if (state == "Blocked" || state == "Error")
-                    {
-                        Console.WriteLine($"[RenderingHandler] Roblox API retornou estado {state} para robloxId {robloxId}");
-                        return "FAILURE";
-                    }
-                    // "Pending" ou "InReview": espera e tenta de novo
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[RenderingHandler] Falha na Roblox API (tentativa {tentativa + 1}): {ex.Message}");
-                }
-
-                await Task.Delay(1000);
-            }
-
-            Console.WriteLine($"[RenderingHandler] Roblox API não retornou imagem para robloxId {robloxId}");
-            return "FAILURE";
-        }
-        
-        // Converte o hash do CDN da Roblox em URL completa
-        private static string RobloxHashToUrl(string hash)
-        {
-            int i = 31;
-            foreach (char c in hash) i ^= c;
-            return $"https://t{i % 8}.rbxcdn.com/{hash}";
-        }
-
-        // Retorna JSON no formato { camera, AABB, files: { "scene.obj": {content}, ... } }
-        // (mesmo formato do render server antigo, conteúdo em base64)
-        private static async Task<string> GetRobloxApiThumbnail3D(long siteUserId)
-        {
-            var sw = Stopwatch.StartNew();
-            long robloxId = await ResolveRobloxUserId(siteUserId);
-            string apiUrl = $"https://thumbnails.roblox.com/v1/users/avatar-3d?userIds={robloxId}";
-
-            for (int tentativa = 0; tentativa < 6; tentativa++)
-            {
-                try
-                {
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                    string json = await client.GetStringAsync(apiUrl, cts.Token);
-                    using var doc = JsonDocument.Parse(json);
-                    var item = doc.RootElement.GetProperty("data")[0];
-                    string? state = item.GetProperty("state").GetString();
-
-                    if (state == "Completed")
-                    {
-                        string? metaUrl = item.GetProperty("imageUrl").GetString();
-                        if (!string.IsNullOrEmpty(metaUrl))
-                        {
-                            string metaJson = await client.GetStringAsync(metaUrl, cts.Token);
-                            using var meta = JsonDocument.Parse(metaJson);
-                            var root = meta.RootElement;
-
-                            var files = new Dictionary<string, object>();
-
-                            if (root.TryGetProperty("obj", out var obj))
-                            {
-                                byte[] data = await client.GetByteArrayAsync(RobloxHashToUrl(obj.GetString()!), cts.Token);
-                                files["scene.obj"] = new { content = Convert.ToBase64String(data) };
-                            }
-
-                            if (root.TryGetProperty("mtl", out var mtl))
-                            {
-                                byte[] data = await client.GetByteArrayAsync(RobloxHashToUrl(mtl.GetString()!), cts.Token);
-                                files["scene.mtl"] = new { content = Convert.ToBase64String(data) };
-                            }
-
-                            if (root.TryGetProperty("textures", out var texArr))
-                            {
-                                int idx = 0;
-                                foreach (var t in texArr.EnumerateArray())
-                                {
-                                    byte[] data = await client.GetByteArrayAsync(RobloxHashToUrl(t.GetString()!), cts.Token);
-                                    // o nome precisa conter "tex.png" (o RedrawAvatar filtra por isso)
-                                    files[$"{idx}_tex.png"] = new { content = Convert.ToBase64String(data) };
-                                    idx++;
-                                }
-                            }
-
-                            var result = new Dictionary<string, object?>();
-                            if (root.TryGetProperty("camera", out var camera))
-                                result["camera"] = camera.Clone();
-                            if (root.TryGetProperty("aabb", out var aabb))
-                                result["AABB"] = aabb.Clone();
-                            result["files"] = files;
-
-                            sw.Stop();
-                            Console.WriteLine($"[RenderingHandler] Roblox API 3D user {siteUserId} -> robloxId {robloxId} OK em {sw.ElapsedMilliseconds}ms");
-                            return JsonSerializer.Serialize(result);
-                        }
-                    }
-                    else if (state == "Blocked" || state == "Error")
-                    {
-                        Console.WriteLine($"[RenderingHandler] Roblox API 3D retornou estado {state}");
-                        return "FAILURE";
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[RenderingHandler] Falha na Roblox API 3D (tentativa {tentativa + 1}): {ex.Message}");
-                }
-
-                await Task.Delay(1000);
-            }
-
-            return "FAILURE";
-        }
-
-        // ---------------------------------------------------------------
-        // RENDER SERVER (todo o resto)
-        // ---------------------------------------------------------------
-
         private static async Task<dynamic> SendRenderRequest(long id, RenderType type, int? x = 0, int? y = 0, bool? isFace = false, string? assetUrl = null, string? characterAppearanceUrl = null, string? animationUrl = null)
         {
-            // Avatar e headshot usam a API da Roblox
-            if (UseRobloxApi && (type == RenderType.Avatar || type == RenderType.Headshot))
-            {
-                return await GetRobloxApiThumbnail(id, type == RenderType.Headshot);
-            }
-
-            if (UseRobloxApi && type == RenderType.Avatar3D)
-            {
-               return await GetRobloxApiThumbnail3D(id);
-            }
-
             Stopwatch sw = new Stopwatch();
             sw.Start();
             string url = "";
+            // Hacky asf
             dynamic renderRequest = new ExpandoObject();
 
             switch (type)
@@ -290,6 +98,10 @@ namespace Roblox.Rendering
                     renderRequest.assetId = id;
                     url = "catalog/mesh";
                     break;
+                // case RenderType.MeshPart:
+                //     renderRequest.assetId = id;
+                //     url = "catalog/meshpart";
+                //     break;
                 case RenderType.Hat:
                     renderRequest.assetId = id;
                     url = "catalog/hat";
@@ -299,7 +111,7 @@ namespace Roblox.Rendering
                     renderRequest.x = x;
                     renderRequest.y = y;
                     url = "game/thumbnail";
-                    allowedPlaceForRender.TryAdd(id, "");
+                    allowedPlaceForRender.TryAdd(id, ""); // Add to the dictionary to allow rendering
                     break;
                 case RenderType.Model:
                     renderRequest.assetId = id;
@@ -314,45 +126,27 @@ namespace Roblox.Rendering
                     renderRequest.animationUrl = animationUrl;
                     url = "catalog/animation";
                     break;
-                default:
-                    Console.WriteLine($"[RenderingHandler] Tipo de render não suportado: {type}");
-                    return "FAILURE";
             }
-
-            string baseUrl = Environment.GetEnvironmentVariable("RENDER_BASE_URL") ?? "http://localhost:7832/";
-            if (!baseUrl.EndsWith("/")) baseUrl += "/";
-            string fullUrl = baseUrl + url;
-
-            try
-            {
-                var content = new StringContent(JsonSerializer.Serialize(renderRequest), Encoding.UTF8, "application/json");
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-                HttpResponseMessage response = await client.PostAsync(fullUrl, content, cts.Token);
-                string body = await response.Content.ReadAsStringAsync();
-                sw.Stop();
-
-                Console.WriteLine($"[RenderingHandler] POST {fullUrl} -> {(int)response.StatusCode} em {sw.ElapsedMilliseconds}ms");
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    Console.WriteLine($"[RenderingHandler] Erro do servidor de render: {body}");
-                    return "FAILURE";
-                }
-
-                var result = JsonSerializer.Deserialize<RenderResponse>(body);
-                if (result == null || !result.success || string.IsNullOrEmpty(result.data))
-                {
-                    Console.WriteLine($"[RenderingHandler] Render falhou: {result?.message ?? body}");
-                    return "FAILURE";
-                }
-                return result.data;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[RenderingHandler] Exceção ao chamar {fullUrl}: {ex.Message}");
-                return "FAILURE";
-            }
-        }
+try
+{
+    var content = new StringContent(JsonSerializer.Serialize(renderRequest), Encoding.UTF8, "application/json");
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+    HttpResponseMessage response = await client.PostAsync("http://127.0.0.1:7832/" + url, content, cts.Token);
+    sw.Stop();
+    Console.WriteLine($"[RenderingHandler] POST {url} -> {(int)response.StatusCode} em {sw.ElapsedMilliseconds}ms");
+    if (!response.IsSuccessStatusCode)
+    {
+        Console.WriteLine("[RenderingHandler] Erro: " + await response.Content.ReadAsStringAsync());
+        return "FAILURE";
+    }
+    var request = await response.Content.ReadFromJsonAsync<RenderResponse>();
+    return request?.data ?? "FAILURE";
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[RenderingHandler] Exceção em {url}: {ex.Message}");
+    return "FAILURE";
+}
 
         public static async Task<string> RequestHatThumbnail(long assetId)
         {
@@ -403,42 +197,60 @@ namespace Roblox.Rendering
         {
             return await SendRenderRequest(assetId, RenderType.Emote);
         }
-
         public static async Task<string> RequestAnimationRender(string characterAppearanceUrl, string animationUrl)
         {
             return await SendRenderRequest(0, RenderType.Animation, characterAppearanceUrl: characterAppearanceUrl, animationUrl: animationUrl);
         }
-
         public static async Task<string> RequestPackageRender(string assetUrls)
         {
             return await SendRenderRequest(0, RenderType.Package, assetUrl: assetUrls);
         }
-
         public static async Task<string> RequestBodyPartRender(string assetUrl)
         {
             return await SendRenderRequest(0, RenderType.BodyPart, assetUrl: assetUrl);
         }
-
         public static async Task<string> RequestPlayerThumbnail(long userId)
         {
             return await SendRenderRequest(userId, RenderType.Avatar);
         }
-
         public static async Task<string> RequestPlayerThumbnail3D(long userId)
         {
             return await SendRenderRequest(userId, RenderType.Avatar3D);
         }
-
         public static async Task<string> RequestHeadshotThumbnail(long userId)
         {
             return await SendRenderRequest(userId, RenderType.Headshot);
         }
 
         /// <summary>
-        /// Redimensiona uma imagem para a largura e altura informadas.
-        /// TImageType pode ser string base64, byte[] ou Stream (com Seek).
-        /// TReturn pode ser MemoryStream, byte[] ou string base64 (PNG).
+        /// Resizes an image to the specified width and height.
         /// </summary>
+        /// <typeparam name="TReturn">
+        /// The format you want the resized image returned in. It can be:
+        /// <list type="bullet">
+        ///   <item>A <see cref="MemoryStream"/></item>
+        ///   <item>A byte array (<see cref="byte[]"/>)</item>
+        ///   <item>A Base64 string representing the PNG image</item>
+        /// </list>
+        /// </typeparam>
+        /// <typeparam name="TImageType">
+        /// The type of the input image you provide. Supported types are:
+        /// <list type="bullet">
+        ///   <item>A Base64 string</item>
+        ///   <item>A byte array</item>
+        ///   <item>Any <see cref="Stream"/> that supports reading and seeking (like <see cref="MemoryStream"/> or <see cref="FileStream"/>)</item>
+        /// </list>
+        /// </typeparam>
+        /// <param name="inputImage">The image you want to resize, in one of the supported formats.</param>
+        /// <param name="width">The new width for the image.</param>
+        /// <param name="height">The new height for the image.</param>
+        /// <returns>
+        /// The resized image in the format you requested.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown if the input type isn't supported, if the input stream can't be read or seeked,
+        /// or if the requested return type isn't supported.
+        /// </exception>
         public static async Task<TReturn> ResizeImage<TReturn, TImageType>(TImageType inputImage, int width, int height)
         {
             MemoryStream imageStream;
@@ -471,6 +283,7 @@ namespace Roblox.Rendering
                 throw new ArgumentException("Unsupported image type for resizing.");
             }
 
+            // Step 2: Process the image
             using (imageStream)
             {
                 using var image = await Image.LoadAsync(imageStream);
