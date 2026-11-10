@@ -333,7 +333,7 @@ app.post("*", (req, res) =>
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, "127.0.0.1", () => {
   console.log(`[render-server] ouvindo na porta ${PORT}`);
   console.log(`[render-server] assets via ${ASSET_URL_TEMPLATE}`);
   getPage()
