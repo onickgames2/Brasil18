@@ -152,7 +152,7 @@ const instructionsModal = props => {
     const instructions = [
         {
             textElement: () => {
-                return <p>Click the <b>MarinePlayerLauncher.exe</b> to run the Marine installer, which just downloaded via your web browser.</p>
+                return <p>Click the <b>Brasil17PlayerLauncher.exe</b> to run the Brasil17 installer, which just downloaded via your web browser.</p>
             },
             element: () => {
                 return <img src='/img/instructions/one.png' style={{ verticalAlign: 'middle', border: 0, marginTop: '60px' }}></img>
@@ -168,7 +168,7 @@ const instructionsModal = props => {
         },
         {
             textElement: () => {
-                return <p>Click <b>Ok</b> once you've successfully installed Marine.</p>
+                return <p>Click <b>Ok</b> once you've successfully installed Brasil17.</p>
             },
             element: () => {
                 return <img src='/img/instructions/three.png' style={{ verticalAlign: 'middle', border: 0 }}></img>
@@ -195,8 +195,8 @@ const instructionsModal = props => {
     ]
 
     return <>
-        {!props.closeModals && <NewModal containerWidth={1000} footerClass={s.footer} exitFunction={props.exitFunction} title="Thanks for playing Marine" footerElements={<>
-            <span style={{ color: 'var(--text-color-secondary)', fontSize: '10px', fontWeight: 600 }}>The Marine installer should download shortly. If it doesn't, start the <Link href="https://github.com/shikataganaii/Pekora-Bootstrapper/releases">
+        {!props.closeModals && <NewModal containerWidth={1000} footerClass={s.footer} exitFunction={props.exitFunction} title="Thanks for playing Brasil17" footerElements={<>
+            <span style={{ color: 'var(--text-color-secondary)', fontSize: '10px', fontWeight: 600 }}>The Brasil17 installer should download shortly. If it doesn't, start the <Link href="https://github.com/shikataganaii/Pekora-Bootstrapper/releases">
                 <a className="link2018" href="https://github.com/shikataganaii/Pekora-Bootstrapper/releases">download now.</a>
             </Link></span>
             <span style={{ float: "right", color: 'var(--text-color-secondary)', fontSize: '10px', fontWeight: 600 }}>Having trouble installing? Click <Link href="https://github.com/shikataganaii/Pekora-Bootstrapper/releases">
