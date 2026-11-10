@@ -141,13 +141,13 @@ try
     }
     var request = await response.Content.ReadFromJsonAsync<RenderResponse>();
     return request?.data ?? "FAILURE";
-}
-catch (Exception ex)
-{
+    }
+    catch (Exception ex)
+    {
     Console.WriteLine($"[RenderingHandler] Exceção em {url}: {ex.Message}");
     return "FAILURE";
+    }
 }
-
         public static async Task<string> RequestHatThumbnail(long assetId)
         {
             return await SendRenderRequest(assetId, RenderType.Hat);
