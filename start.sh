@@ -69,7 +69,7 @@ echo "✅ Backend no ar."
 
 # Frontend (Next.js) na porta interna
 cd /app/Frontend || exit 1
-PORT="$FRONTEND_PORT" npm run start -- --hostname 0.0.0.0 --port "$FRONTEND_PORT" &
+PORT="$FRONTEND_PORT" npm run start -- --hostname 127.0.0.1 --port "$FRONTEND_PORT" &
 FRONTEND_PID=$!
 
 # Render server (three.js + Chromium) na porta interna
