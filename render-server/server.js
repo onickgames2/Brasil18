@@ -11,6 +11,13 @@ const PORT = Number(process.env.RENDER_PORT || 7832);
 const MAX_CONCURRENT = Number(process.env.MAX_CONCURRENT || 2);
 const CHROMIUM = process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium";
 
+// Backend (ASP.NET) roda na porta pública do Render, acessível por localhost
+const BACKEND_PORT = Number(process.env.PORT || 10000);
+// Modelo de URL pra baixar um asset pelo ID. {id} é trocado pelo número.
+// Se o seu backend usar outra rota, defina ASSET_URL_TEMPLATE no Render.
+const ASSET_URL_TEMPLATE =
+  process.env.ASSET_URL_TEMPLATE || `http://127.0.0.1:${BACKEND_PORT}/asset/?id={id}`;
+
 // Cores padrão do noob clássico
 const DEFAULT_COLORS = {
   head: "#F5CD30",
@@ -27,7 +34,6 @@ app.use("/vendor/three", express.static(path.join(__dirname, "node_modules/three
 app.use("/", express.static(path.join(__dirname, "public")));
 
 // ---------- Tabela de cores (brickColorId -> hex) ----------
-// Procura o avatar-colors.json em /app/JsonData (do backend) ou ao lado deste arquivo.
 const COLORS_PATHS = [
   process.env.AVATAR_COLORS_PATH,
   path.join(__dirname, "..", "JsonData", "avatar-colors.json"),
@@ -50,9 +56,6 @@ if (brickHex.size === 0) {
 }
 
 // ---------- Banco (só leitura das cores do avatar) ----------
-// Defina RENDER_DATABASE_URL no Render, no formato:
-//   postgresql://postgres.<ref>:<senha>@aws-0-us-east-1.pooler.supabase.com:5432/postgres
-// Sem ela, o servidor usa o noob padrão (ou as cores que vierem no corpo da requisição).
 const DB_URL = process.env.RENDER_DATABASE_URL;
 const pool = DB_URL
   ? new pg.Pool({
@@ -66,8 +69,6 @@ const pool = DB_URL
 if (pool) pool.on("error", (e) => console.error("[db]", e.message));
 else console.warn("[render-server] RENDER_DATABASE_URL não definida: sem cores reais dos usuários");
 
-// Colunas da tabela user_avatar com o brickColorId de cada parte.
-// Se o nome de alguma coluna for diferente no seu banco, é só mudar aqui.
 const COLOR_COLUMNS = {
   head: "head_color_id",
   torso: "torso_color_id",
@@ -132,7 +133,6 @@ function getBrowser() {
 }
 
 // ---------- Página de render (uma só, reaproveitada) ----------
-// Assim o GLB, o pré-load e o cache do render.html valem para todas as requisições.
 let pagePromise = null;
 function getPage() {
   if (!pagePromise) {
@@ -179,7 +179,6 @@ async function withSlot(fn) {
 }
 
 // ---------- Cores do avatar ----------
-// Ordem de prioridade: cores enviadas no corpo da requisição > banco > noob padrão
 const HEX = /^#[0-9a-fA-F]{6}$/;
 async function getAvatarColors(userId, override) {
   const colors = { ...DEFAULT_COLORS, ...(await fetchUserColors(userId)) };
@@ -193,7 +192,6 @@ async function getAvatarColors(userId, override) {
   return colors;
 }
 
-// Só aceita URLs http(s) para shirt/pants (templates 585x559, precisam de CORS)
 const httpUrl = (v) => (typeof v === "string" && /^https?:\/\//i.test(v) ? v : null);
 
 // ---------- Render ----------
@@ -203,14 +201,12 @@ async function renderScene(config) {
     const dataUrl = await page.evaluate((c) => window.renderAvatar(c), config);
     return dataUrl.replace(/^data:image\/png;base64,/, "");
   } catch (e) {
-    // Se a página travou ou fechou, descarta pra próxima requisição abrir uma nova
     pagePromise = null;
     await page.close().catch(() => {});
     throw e;
   }
 }
 
-// Texturas (PNG base64) de cada parte do corpo para a miniatura 3D
 async function renderTextures3D(colors) {
   const page = await getPage();
   try {
@@ -240,9 +236,64 @@ function makeHandler(kind, defaultSize) {
         renderScene({ kind: kind === "headshot" ? "headshot" : "body", size, colors, shirt, pants })
       );
       console.log(`[render] ${kind} user=${userId} ${Date.now() - t0}ms`);
-      res.json({ success: true, data }); // data = PNG em base64
+      res.json({ success: true, data });
     } catch (e) {
       console.error(`[render] ${kind} falhou:`, e);
+      res.status(500).json({ success: false, message: String(e.message || e) });
+    }
+  };
+}
+
+// ---------- Imagens de assets (decal, face, camisa, calça, t-shirt) ----------
+const MAX_ASSET_BYTES = 10 * 1024 * 1024;
+
+function isImageBuffer(buf) {
+  if (buf.length < 12) return false;
+  // PNG
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return true;
+  // JPEG
+  if (buf[0] === 0xff && buf[1] === 0xd8) return true;
+  // GIF
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return true;
+  // WEBP (RIFF....WEBP)
+  if (buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") return true;
+  return false;
+}
+
+// Baixa o asset; se vier um XML (Decal/Shirt/Pants/T-Shirt), segue o ID da imagem lá dentro
+async function fetchAssetImage(assetId, depth = 0) {
+  if (depth > 3) throw new Error("referência de asset profunda demais");
+  const url = ASSET_URL_TEMPLATE.replace("{id}", String(assetId));
+  const res = await fetch(url, { signal: AbortSignal.timeout(20000), redirect: "follow" });
+  if (!res.ok) throw new Error(`asset ${assetId} -> HTTP ${res.status} (${url})`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > MAX_ASSET_BYTES) throw new Error(`asset ${assetId} grande demais`);
+  if (isImageBuffer(buf)) return buf;
+
+  const text = buf.toString("utf8");
+  const m =
+    text.match(/<url>[^<]*?id=(\d+)/i) ||
+    text.match(/rbxassetid:\/\/(\d+)/i) ||
+    text.match(/<url>[^<]*?\/(\d+)\s*<\/url>/i);
+  if (!m) throw new Error(`asset ${assetId} não é imagem nem aponta pra uma`);
+  const innerId = Number(m[1]);
+  if (innerId === Number(assetId)) throw new Error(`asset ${assetId} aponta pra ele mesmo`);
+  return fetchAssetImage(innerId, depth + 1);
+}
+
+function makeImageHandler(kind) {
+  return async (req, res) => {
+    const t0 = Date.now();
+    try {
+      const assetId = Number(req.body?.assetId);
+      if (!Number.isFinite(assetId) || assetId <= 0) {
+        return res.status(400).json({ success: false, message: "assetId inválido" });
+      }
+      const buf = await withSlot(() => fetchAssetImage(assetId));
+      console.log(`[render] ${kind} asset=${assetId} ${buf.length}B ${Date.now() - t0}ms`);
+      res.json({ success: true, data: buf.toString("base64") });
+    } catch (e) {
+      console.error(`[render] ${kind} falhou:`, e.message || e);
       res.status(500).json({ success: false, message: String(e.message || e) });
     }
   };
@@ -252,7 +303,11 @@ function makeHandler(kind, defaultSize) {
 app.post("/player/thumbnail", makeHandler("avatar", 420));
 app.post("/player/headshot", makeHandler("headshot", 150));
 
-// Miniatura 3D: devolve o JSON { camera, AABB, files } que o RedrawAvatar do backend espera
+app.post("/image/image", makeImageHandler("image"));
+app.post("/image/clothing", makeImageHandler("clothing"));
+app.post("/image/teeshirt", makeImageHandler("teeshirt"));
+
+// Miniatura 3D
 app.post("/player/thumbnail-3d", async (req, res) => {
   const t0 = Date.now();
   try {
@@ -262,7 +317,7 @@ app.post("/player/thumbnail-3d", async (req, res) => {
     }
     const colors = await getAvatarColors(userId, req.body?.colors);
     const textures = await withSlot(() => renderTextures3D(colors));
-    const data = buildThumbnail3D(textures); // texto JSON
+    const data = buildThumbnail3D(textures);
     console.log(`[render] avatar-3d user=${userId} ${Date.now() - t0}ms`);
     res.json({ success: true, data });
   } catch (e) {
@@ -280,7 +335,7 @@ app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`[render-server] ouvindo na porta ${PORT}`);
-  // Já abre o Chromium e a página, pra primeira requisição não esperar
+  console.log(`[render-server] assets via ${ASSET_URL_TEMPLATE}`);
   getPage()
     .then(() => console.log("[render-server] página de render pronta"))
     .catch((e) => console.error("[render-server] erro ao preparar a página:", e));
