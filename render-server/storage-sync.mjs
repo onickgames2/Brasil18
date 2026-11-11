@@ -31,6 +31,12 @@ if (!DB_URL) {
   console.warn(`${TAG} STORAGE_DATABASE_URL/RENDER_DATABASE_URL não definida: sem backup de arquivos`);
   process.exit(0);
 }
+try {
+  const u = new URL(DB_URL);
+  console.log(`${TAG} conectando em ${u.hostname}:${u.port || 5432} como ${decodeURIComponent(u.username)}`);
+} catch {
+  console.warn(`${TAG} string de conexão inválida`);
+}
 
 const pool = new pg.Pool({
   connectionString: DB_URL,
